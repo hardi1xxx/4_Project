@@ -69,11 +69,28 @@ railway domain   # generate domain publik
 
 ## Fitur
 
+- **Tema terang** dengan 3 logo brand di header: Telkom Akses, Danantara Indonesia, Infranexia.
 - **5 tab sheet**: MBB, OLO, HEM, FBB, PT2 — klik tab untuk ganti data.
+- **Kartu angka besar** status pekerjaan per sheet (total + breakdown per status).
+- **Grafik bar & donut** untuk visualisasi proporsi status, otomatis update sesuai sheet aktif.
 - **Pencarian global**: cari teks di semua kolom sekaligus.
-- **Filter per kolom**: tambah filter dropdown untuk kolom tertentu (mis. Status, Region), bisa lebih dari satu filter sekaligus.
+- **Filter per kolom**: tambah filter dropdown untuk kolom tertentu, bisa lebih dari satu filter sekaligus.
 - **Auto refresh**: data di-cache 60 detik di server, dan frontend auto-reload tiap 60 detik. Tombol "🔄 Refresh Data" untuk paksa ambil data terbaru.
 - **Responsive table**: scroll horizontal/vertikal, header sticky.
+
+## Kolom Status yang Dipakai untuk Kartu & Grafik
+
+Diset di `server.js` pada variabel `STATUS_COLUMN`:
+
+| Sheet | Kolom Status |
+|---|---|
+| MBB | `Status Pekerjaan` |
+| OLO | `STATUS PEKERJAAN` |
+| FBB | `Status Fisik` |
+| HEM | `PROGRESS JT LAST UPDATE` |
+| PT2 | `STATUS LOP` |
+
+Kalau nama kolom di spreadsheet berbeda penulisannya (typo/spasi), update nilai di `STATUS_COLUMN` agar kartu & grafik bisa baca datanya dengan benar.
 
 ## Endpoint API (kalau ingin diintegrasikan ke tempat lain)
 
@@ -90,4 +107,3 @@ railway domain   # generate domain publik
 - **Error "tidak bisa diakses publik"**: ubah sharing setting spreadsheet ke "Anyone with the link can view".
 - **Nama kolom aneh/kosong**: pastikan baris pertama tiap sheet adalah header (nama kolom), tanpa baris judul/merge cell di atasnya.
 - **Data tidak update**: klik "🔄 Refresh Data" untuk bypass cache 60 detik.
-# 4_Project

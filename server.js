@@ -20,6 +20,15 @@ const SPREADSHEET_ID =
 // Daftar sheet/tab yang dimonitor
 const SHEET_NAMES = ["MBB", "OLO", "HEM", "FBB", "PT2"];
 
+// Kolom status utama per sheet (untuk kartu angka besar & grafik)
+const STATUS_COLUMN = {
+  MBB: "Status Pekerjaan",
+  OLO: "STATUS PEKERJAAN",
+  FBB: "Status Fisik",
+  HEM: "PROGRESS JT LAST UPDATE",
+  PT2: "STATUS LOP",
+};
+
 // Cache sederhana di memori supaya tidak terus-menerus menghantam Google
 const cache = {
   data: {},     // { MBB: [...rows], OLO: [...rows], ... }
@@ -172,6 +181,80 @@ app.get("/api/summary", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Statistik status (untuk kartu angka besar + grafik) - satu sheet
+app.get("/api/stats/:sheet", async (req, res) => {
+  const sheetName = req.params.sheet.toUpperCase();
+  if (!SHEET_NAMES.includes(sheetName)) {
+    return res.status(404).json({ error: `Sheet "${sheetName}" tidak dikenal.` });
+  }
+  try {
+    const rows = await getSheetData(sheetName);
+    const statusCol = STATUS_COLUMN[sheetName];
+    const counts = {};
+    let withStatus = 0;
+
+    rows.forEach((row) => {
+      let val = String(row[statusCol] ?? "").trim();
+      if (!val) val = "(Kosong)";
+      else withStatus++;
+      counts[val] = (counts[val] || 0) + 1;
+    });
+
+    const breakdown = Object.entries(counts)
+      .map(([status, count]) => ({ status, count }))
+      .sort((a, b) => b.count - a.count);
+
+    res.json({
+      sheet: sheetName,
+      statusColumn: statusCol,
+      total: rows.length,
+      withStatus,
+      breakdown,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, sheet: sheetName, statusColumn: STATUS_COLUMN[sheetName] });
+  }
+});
+
+// Statistik semua sheet sekaligus (untuk halaman overview)
+app.get("/api/stats-all", async (req, res) => {
+  const result = {};
+  for (const sheetName of SHEET_NAMES) {
+    const statusCol = STATUS_COLUMN[sheetName];
+    try {
+      const rows = await getSheetData(sheetName);
+      const counts = {};
+      let withStatus = 0;
+      rows.forEach((row) => {
+        let val = String(row[statusCol] ?? "").trim();
+        if (!val) val = "(Kosong)";
+        else withStatus++;
+        counts[val] = (counts[val] || 0) + 1;
+      });
+      const breakdown = Object.entries(counts)
+        .map(([status, count]) => ({ status, count }))
+        .sort((a, b) => b.count - a.count);
+
+      result[sheetName] = {
+        statusColumn: statusCol,
+        total: rows.length,
+        withStatus,
+        breakdown,
+        error: null,
+      };
+    } catch (err) {
+      result[sheetName] = {
+        statusColumn: statusCol,
+        total: 0,
+        withStatus: 0,
+        breakdown: [],
+        error: err.message,
+      };
+    }
+  }
+  res.json(result);
 });
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));

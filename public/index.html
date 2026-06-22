@@ -3,18 +3,23 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dashboard Monitoring</title>
+<title>Dashboard Monitoring Project</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
   :root {
-    --bg: #0f172a;
-    --panel: #1e293b;
-    --panel-2: #273449;
-    --border: #334155;
-    --text: #e2e8f0;
-    --muted: #94a3b8;
-    --accent: #38bdf8;
-    --accent-2: #22c55e;
-    --danger: #f87171;
+    --bg: #f4f6fb;
+    --panel: #ffffff;
+    --panel-soft: #f8fafc;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --green: #16a34a;
+    --amber: #d97706;
+    --red: #dc2626;
+    --slate: #64748b;
+    --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
   }
   * { box-sizing: border-box; }
   body {
@@ -23,103 +28,173 @@
     background: var(--bg);
     color: var(--text);
   }
-  header {
-    padding: 18px 24px;
+
+  .brandbar {
+    background: #ffffff;
     border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 14px;
   }
-  header h1 {
-    margin: 0;
-    font-size: 19px;
-    font-weight: 600;
-  }
-  header .sub {
-    color: var(--muted);
-    font-size: 13px;
-    margin-top: 2px;
-  }
-  .tabs {
+  .brandbar .logos {
     display: flex;
-    gap: 6px;
-    padding: 14px 24px 0;
+    align-items: center;
+    gap: 22px;
     flex-wrap: wrap;
   }
+  .brandbar .logos img {
+    height: 32px;
+    object-fit: contain;
+  }
+  .brandbar .divider {
+    width: 1px;
+    height: 28px;
+    background: var(--border);
+  }
+
+  .pagehead {
+    padding: 20px 28px 4px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pagehead h1 { margin: 0; font-size: 21px; font-weight: 700; }
+  .pagehead .sub { color: var(--muted); font-size: 13px; }
+
+  button {
+    padding: 9px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  button:hover { background: var(--panel-soft); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { background: #1d4ed8; }
+
+  .tabs { display: flex; gap: 6px; padding: 16px 28px 0; flex-wrap: wrap; }
   .tab {
-    padding: 9px 18px;
-    border-radius: 8px 8px 0 0;
-    background: var(--panel);
+    padding: 10px 20px;
+    border-radius: 10px 10px 0 0;
+    background: var(--panel-soft);
     color: var(--muted);
     cursor: pointer;
     border: 1px solid var(--border);
     border-bottom: none;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
   }
   .tab.active {
-    background: var(--panel-2);
+    background: #fff;
     color: var(--accent);
-    border-color: var(--accent);
+    border-bottom: 2px solid #fff;
+    margin-bottom: -1px;
   }
-  .content {
-    padding: 0 24px 30px;
+
+  .content { padding: 0 28px 36px; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    margin: 18px 0;
   }
+  .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .stat-card .label {
+    font-size: 12.5px;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .stat-card .num { font-size: 34px; font-weight: 800; margin-top: 6px; line-height: 1; }
+  .stat-card .pct { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+  .stat-card.total .num { color: var(--accent); }
+  .stat-card.c0 .num { color: var(--green); }
+  .stat-card.c1 .num { color: var(--amber); }
+  .stat-card.c2 .num { color: var(--red); }
+  .stat-card.c3 .num { color: var(--slate); }
+  .stat-card.c4 .num { color: #7c3aed; }
+
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 16px;
+    margin: 18px 0;
+  }
+  @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .chart-card h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; color: var(--text); }
+  .chart-wrap { position: relative; height: 280px; }
+
   .toolbar {
     background: var(--panel);
     border: 1px solid var(--border);
-    border-radius: 0 8px 8px 8px;
-    padding: 14px;
+    border-radius: 14px;
+    padding: 14px 16px;
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
     align-items: center;
+    box-shadow: var(--shadow);
   }
   .toolbar input[type="text"] {
     flex: 1;
     min-width: 200px;
-    padding: 9px 12px;
-    border-radius: 6px;
+    padding: 10px 14px;
+    border-radius: 8px;
     border: 1px solid var(--border);
-    background: var(--bg);
+    background: var(--panel-soft);
     color: var(--text);
     font-size: 14px;
   }
   select {
-    padding: 8px 10px;
-    border-radius: 6px;
+    padding: 9px 10px;
+    border-radius: 8px;
     border: 1px solid var(--border);
-    background: var(--bg);
+    background: var(--panel-soft);
     color: var(--text);
     font-size: 13px;
     max-width: 180px;
   }
-  button {
-    padding: 9px 14px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--panel-2);
-    color: var(--text);
-    cursor: pointer;
-    font-size: 13px;
-  }
-  button.primary {
-    background: var(--accent);
-    color: #06222f;
-    border-color: var(--accent);
-    font-weight: 600;
-  }
-  .filters-row {
+  .filters-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; width: 100%; }
+  .filter-chip {
     display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 10px;
-    width: 100%;
+    gap: 4px;
+    align-items: center;
+    background: var(--accent-soft);
+    border-radius: 20px;
+    padding: 4px 6px 4px 12px;
   }
+  .filter-chip span { font-size: 12px; color: #1e40af; font-weight: 600; }
+  .filter-chip select { border: none; background: transparent; font-size: 12px; color: #1e40af; max-width: 130px; }
+  .filter-chip button { border: none; background: transparent; color: #1e40af; padding: 2px 6px; font-size: 13px; }
+
   .meta {
-    margin: 12px 0;
+    margin: 14px 0 10px;
     color: var(--muted);
     font-size: 13px;
     display: flex;
@@ -130,68 +205,80 @@
   .table-wrap {
     overflow: auto;
     border: 1px solid var(--border);
-    border-radius: 8px;
-    max-height: 65vh;
+    border-radius: 14px;
+    max-height: 60vh;
+    background: var(--panel);
+    box-shadow: var(--shadow);
   }
-  table {
-    border-collapse: collapse;
-    width: 100%;
-    font-size: 13px;
-  }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
   thead th {
     position: sticky;
     top: 0;
-    background: var(--panel-2);
-    color: var(--accent);
+    background: var(--panel-soft);
+    color: var(--text);
     text-align: left;
-    padding: 10px 12px;
+    padding: 11px 14px;
     border-bottom: 2px solid var(--border);
     white-space: nowrap;
+    font-weight: 700;
   }
-  tbody td {
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  tbody tr:hover {
-    background: rgba(56, 189, 248, 0.07);
-  }
-  .empty, .error, .loading {
-    padding: 40px;
-    text-align: center;
-    color: var(--muted);
-  }
-  .error { color: var(--danger); }
+  tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  tbody tr:hover { background: #f8faff; }
+  .empty, .error, .loading { padding: 40px; text-align: center; color: var(--muted); }
+  .error { color: var(--red); }
   .badge {
     display: inline-block;
-    padding: 3px 9px;
+    padding: 3px 10px;
     border-radius: 20px;
-    background: var(--panel-2);
+    background: var(--accent-soft);
     font-size: 12px;
-    color: var(--accent-2);
-    border: 1px solid var(--border);
+    color: var(--accent);
+    font-weight: 700;
+    border: 1px solid #bfdbfe;
   }
-  footer {
-    text-align: center;
-    color: var(--muted);
-    font-size: 12px;
-    padding: 14px;
-  }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 16px; }
 </style>
 </head>
 <body>
 
-<header>
-  <div>
-    <h1>📊 Dashboard Monitoring</h1>
-    <div class="sub">Data live dari Google Sheets — MBB, OLO, HEM, FBB, PT2</div>
+<div class="brandbar">
+  <div class="logos">
+    <img src="/logos/telkomakses.png" alt="Telkom Akses" />
+    <div class="divider"></div>
+    <img src="/logos/danantara.png" alt="Danantara Indonesia" />
+    <div class="divider"></div>
+    <img src="/logos/infranexia.png" alt="Infranexia" />
   </div>
-  <button id="refreshBtn">🔄 Refresh Data</button>
-</header>
+  <div class="right">
+    <span style="font-size:12px;color:var(--muted)" id="lastUpdated"></span>
+  </div>
+</div>
+
+<div class="pagehead">
+  <div>
+    <h1>📊 Dashboard Monitoring Project</h1>
+    <div class="sub">Status pekerjaan real-time — MBB, OLO, HEM, FBB, PT2</div>
+  </div>
+  <button class="primary" id="refreshBtn">🔄 Refresh Data</button>
+</div>
 
 <div class="tabs" id="tabs"></div>
 
 <div class="content">
+
+  <div class="stats-grid" id="statsGrid"></div>
+
+  <div class="charts-row">
+    <div class="chart-card">
+      <h3 id="chartTitleBar">Distribusi Status (Bar Chart)</h3>
+      <div class="chart-wrap"><canvas id="barChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <h3 id="chartTitleDonut">Proporsi Status (Donut Chart)</h3>
+      <div class="chart-wrap"><canvas id="donutChart"></canvas></div>
+    </div>
+  </div>
+
   <div class="toolbar">
     <input type="text" id="searchInput" placeholder="Cari di semua kolom..." />
     <select id="filterColumn">
@@ -204,7 +291,6 @@
 
   <div class="meta">
     <div id="metaInfo">Memuat data...</div>
-    <div id="lastUpdated"></div>
   </div>
 
   <div class="table-wrap">
@@ -212,13 +298,16 @@
   </div>
 </div>
 
-<footer>Dashboard Monitoring · Auto-refresh tiap 60 detik</footer>
+<footer>Dashboard Monitoring · Telkom Akses · Danantara Indonesia · Infranexia · Auto-refresh tiap 60 detik</footer>
 
 <script>
 const SHEETS = ["MBB", "OLO", "HEM", "FBB", "PT2"];
+
 let currentSheet = SHEETS[0];
-let activeFilters = {}; // { kolom: nilai }
+let activeFilters = {};
 let currentColumns = [];
+let barChartInstance = null;
+let donutChartInstance = null;
 
 const tabsEl = document.getElementById("tabs");
 const searchInput = document.getElementById("searchInput");
@@ -227,6 +316,10 @@ const activeFiltersEl = document.getElementById("activeFilters");
 const tableArea = document.getElementById("tableArea");
 const metaInfo = document.getElementById("metaInfo");
 const lastUpdatedEl = document.getElementById("lastUpdated");
+const statsGrid = document.getElementById("statsGrid");
+
+const PALETTE = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#64748b", "#db2777"];
+const CARD_CLASSES = ["c0", "c1", "c2", "c3", "c4"];
 
 function renderTabs() {
   tabsEl.innerHTML = "";
@@ -239,18 +332,88 @@ function renderTabs() {
       activeFilters = {};
       searchInput.value = "";
       renderTabs();
-      loadData();
+      loadAll();
     };
     tabsEl.appendChild(div);
+  });
+}
+
+async function loadAll() {
+  await Promise.all([loadStats(), loadData()]);
+}
+
+async function loadStats() {
+  try {
+    const res = await fetch(`/api/stats/${currentSheet}`);
+    const json = await res.json();
+
+    document.getElementById("chartTitleBar").textContent = `Distribusi "${json.statusColumn}" (Bar Chart)`;
+    document.getElementById("chartTitleDonut").textContent = `Proporsi "${json.statusColumn}" (Donut Chart)`;
+
+    if (json.error) {
+      statsGrid.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ ${json.error}</div>`;
+      return;
+    }
+
+    statsGrid.innerHTML = "";
+    const totalCard = document.createElement("div");
+    totalCard.className = "stat-card total";
+    totalCard.innerHTML = `<div class="label">Total ${json.sheet}</div><div class="num">${json.total}</div><div class="pct">Seluruh baris data</div>`;
+    statsGrid.appendChild(totalCard);
+
+    json.breakdown.slice(0, 7).forEach((item, i) => {
+      const pct = json.total > 0 ? ((item.count / json.total) * 100).toFixed(1) : "0.0";
+      const card = document.createElement("div");
+      card.className = "stat-card " + (CARD_CLASSES[i % CARD_CLASSES.length]);
+      card.innerHTML = `<div class="label" title="${escapeHtml(item.status)}">${escapeHtml(item.status)}</div><div class="num">${item.count}</div><div class="pct">${pct}% dari total</div>`;
+      statsGrid.appendChild(card);
+    });
+
+    renderCharts(json.breakdown);
+  } catch (err) {
+    statsGrid.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ Gagal memuat statistik: ${err.message}</div>`;
+  }
+}
+
+function renderCharts(breakdown) {
+  const labels = breakdown.map((b) => b.status);
+  const data = breakdown.map((b) => b.count);
+  const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
+
+  if (barChartInstance) barChartInstance.destroy();
+  if (donutChartInstance) donutChartInstance.destroy();
+
+  const barCtx = document.getElementById("barChart").getContext("2d");
+  barChartInstance = new Chart(barCtx, {
+    type: "bar",
+    data: { labels, datasets: [{ label: "Jumlah", data, backgroundColor: colors, borderRadius: 6 }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#1e293b", font: { size: 11 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
+      },
+    },
+  });
+
+  const donutCtx = document.getElementById("donutChart").getContext("2d");
+  donutChartInstance = new Chart(donutCtx, {
+    type: "doughnut",
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: "#ffffff" }] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "right", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11 } } } },
+    },
   });
 }
 
 function buildQuery(refresh) {
   const params = new URLSearchParams();
   if (searchInput.value.trim()) params.set("search", searchInput.value.trim());
-  Object.entries(activeFilters).forEach(([col, val]) => {
-    params.set("filter_" + col, val);
-  });
+  Object.entries(activeFilters).forEach(([col, val]) => params.set("filter_" + col, val));
   if (refresh) params.set("refresh", "1");
   return params.toString();
 }
@@ -275,7 +438,7 @@ async function loadData(refresh = false) {
     renderTable(json.columns, json.rows);
 
     metaInfo.innerHTML = `Menampilkan <span class="badge">${json.total}</span> baris pada sheet <b>${json.sheet}</b>`;
-    lastUpdatedEl.textContent = "Terakhir diambil: " + new Date(json.lastUpdated).toLocaleString("id-ID");
+    lastUpdatedEl.textContent = "Data terakhir: " + new Date(json.lastUpdated).toLocaleString("id-ID");
   } catch (err) {
     tableArea.innerHTML = `<div class="error">⚠️ Gagal memuat data: ${err.message}</div>`;
   }
@@ -284,7 +447,7 @@ async function loadData(refresh = false) {
 function populateFilterColumnOptions(columns) {
   filterColumnSelect.innerHTML = '<option value="">+ Tambah filter kolom...</option>';
   columns.forEach((c) => {
-    if (activeFilters[c] !== undefined) return; // sudah aktif
+    if (activeFilters[c] !== undefined) return;
     const opt = document.createElement("option");
     opt.value = c;
     opt.textContent = c;
@@ -300,6 +463,7 @@ async function addFilter(column) {
     const value = json.options[0] || "";
     activeFilters[column] = value;
     renderActiveFilters(json.options, column);
+    loadData();
   } catch (err) {
     console.error(err);
   }
@@ -309,14 +473,10 @@ function renderActiveFilters(optionsForNew, newCol) {
   activeFiltersEl.innerHTML = "";
   Object.keys(activeFilters).forEach(async (col) => {
     const wrap = document.createElement("div");
-    wrap.style.display = "flex";
-    wrap.style.gap = "4px";
-    wrap.style.alignItems = "center";
+    wrap.className = "filter-chip";
 
     const label = document.createElement("span");
-    label.textContent = col + ":";
-    label.style.fontSize = "12px";
-    label.style.color = "var(--muted)";
+    label.textContent = col;
 
     const sel = document.createElement("select");
     sel.dataset.col = col;
@@ -341,7 +501,6 @@ function renderActiveFilters(optionsForNew, newCol) {
 
     const removeBtn = document.createElement("button");
     removeBtn.textContent = "✕";
-    removeBtn.style.padding = "4px 8px";
     removeBtn.onclick = () => {
       delete activeFilters[col];
       renderActiveFilters();
@@ -367,9 +526,7 @@ function renderTable(columns, rows) {
   html += "</tr></thead><tbody>";
   rows.forEach((row) => {
     html += "<tr>";
-    columns.forEach((c) => {
-      html += `<td>${escapeHtml(row[c] ?? "")}</td>`;
-    });
+    columns.forEach((c) => { html += `<td>${escapeHtml(row[c] ?? "")}</td>`; });
     html += "</tr>";
   });
   html += "</tbody></table>";
@@ -377,23 +534,18 @@ function renderTable(columns, rows) {
 }
 
 function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 document.getElementById("searchBtn").onclick = () => loadData();
-searchInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") loadData();
-});
+searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadData(); });
 document.getElementById("clearBtn").onclick = () => {
   searchInput.value = "";
   activeFilters = {};
   renderActiveFilters();
   loadData();
 };
-document.getElementById("refreshBtn").onclick = () => loadData(true);
+document.getElementById("refreshBtn").onclick = () => loadAll();
 filterColumnSelect.onchange = () => {
   const col = filterColumnSelect.value;
   filterColumnSelect.value = "";
@@ -401,8 +553,8 @@ filterColumnSelect.onchange = () => {
 };
 
 renderTabs();
-loadData();
-setInterval(() => loadData(), 60000);
+loadAll();
+setInterval(() => loadAll(), 60000);
 </script>
 </body>
 </html>
