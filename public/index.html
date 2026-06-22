@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Dashboard Monitoring Project</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="/vendor/chart.umd.js"></script>
 <style>
   :root {
     --bg: #f4f6fb;
@@ -376,6 +376,14 @@ async function loadStats() {
 }
 
 function renderCharts(breakdown) {
+  if (typeof Chart === "undefined") {
+    document.getElementById("barChart").parentElement.innerHTML =
+      '<div class="error">⚠️ Library grafik gagal dimuat. Coba refresh halaman (Ctrl+Shift+R).</div>';
+    document.getElementById("donutChart").parentElement.innerHTML =
+      '<div class="error">⚠️ Library grafik gagal dimuat. Coba refresh halaman (Ctrl+Shift+R).</div>';
+    return;
+  }
+
   const labels = breakdown.map((b) => b.status);
   const data = breakdown.map((b) => b.count);
   const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
