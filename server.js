@@ -39,6 +39,33 @@ const CACHE_TTL_MS = 60 * 1000; // 60 detik
 // ============================================================
 // FUNGSI AMBIL DATA DARI GOOGLE SHEETS (CSV export per-sheet)
 // ============================================================
+
+function normalizeKey(str) {
+  return String(str ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+// Cari header sebenarnya: baris pertama yang punya cukup banyak sel terisi
+// (mengatasi sheet yang punya baris judul/merge cell sebelum baris header asli)
+function detectHeaderRowIndex(rawRows) {
+  let bestIndex = 0;
+  let bestScore = -1;
+  const maxCols = rawRows.reduce((m, r) => Math.max(m, r.length), 0);
+
+  for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+    const row = rawRows[i];
+    const filled = row.filter((c) => String(c ?? "").trim() !== "").length;
+    // Skor: jumlah sel terisi, dengan syarat minimal isi > 1 sel dan bukan baris kosong total
+    if (filled >= 2 && filled > bestScore) {
+      bestScore = filled;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
 async function fetchSheetCSV(sheetName) {
   const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
     sheetName
@@ -59,14 +86,79 @@ async function fetchSheetCSV(sheetName) {
     );
   }
 
-  const records = parse(csvText, {
-    columns: true,
-    skip_empty_lines: true,
+  // Parse mentah dulu (array of array) supaya bisa deteksi baris header asli
+  const rawRows = parse(csvText, {
+    skip_empty_lines: false,
     relax_column_count: true,
     trim: true,
   });
 
+  if (rawRows.length === 0) return [];
+
+  const headerIdx = detectHeaderRowIndex(rawRows);
+  const headerRaw = rawRows[headerIdx];
+
+  // Bersihkan nama header: trim, isi nama default kalau kosong, dedup duplikat
+  const seen = {};
+  const headers = headerRaw.map((h, i) => {
+    let name = String(h ?? "").trim();
+    if (!name) name = `Kolom_${i + 1}`;
+    if (seen[name] !== undefined) {
+      seen[name]++;
+      name = `${name}_${seen[name]}`;
+    } else {
+      seen[name] = 0;
+    }
+    return name;
+  });
+
+  const dataRows = rawRows.slice(headerIdx + 1);
+
+  const records = dataRows
+    .filter((r) => r.some((c) => String(c ?? "").trim() !== "")) // skip baris benar2 kosong
+    .map((r) => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        obj[h] = r[i] !== undefined ? String(r[i]).trim() : "";
+      });
+      return obj;
+    });
+
   return records;
+}
+
+// Cari nilai kolom status dengan pencocokan fleksibel:
+// exact match -> case-insensitive/trim match -> partial contains match
+function getStatusValue(row, statusColName) {
+  if (row[statusColName] !== undefined) return row[statusColName];
+
+  const target = normalizeKey(statusColName);
+  const keys = Object.keys(row);
+
+  // cocokkan exact setelah dinormalisasi (beda kapital/spasi)
+  let match = keys.find((k) => normalizeKey(k) === target);
+  if (match) return row[match];
+
+  // cocokkan partial (salah satu mengandung yang lain)
+  match = keys.find(
+    (k) => normalizeKey(k).includes(target) || target.includes(normalizeKey(k))
+  );
+  if (match) return row[match];
+
+  return undefined;
+}
+
+function resolveStatusColumn(row, statusColName) {
+  if (!row) return statusColName;
+  if (row[statusColName] !== undefined) return statusColName;
+  const target = normalizeKey(statusColName);
+  const keys = Object.keys(row);
+  let match = keys.find((k) => normalizeKey(k) === target);
+  if (match) return match;
+  match = keys.find(
+    (k) => normalizeKey(k).includes(target) || target.includes(normalizeKey(k))
+  );
+  return match || statusColName;
 }
 
 async function getSheetData(sheetName, forceRefresh = false) {
@@ -192,11 +284,12 @@ app.get("/api/stats/:sheet", async (req, res) => {
   try {
     const rows = await getSheetData(sheetName);
     const statusCol = STATUS_COLUMN[sheetName];
+    const resolvedCol = resolveStatusColumn(rows[0], statusCol);
     const counts = {};
     let withStatus = 0;
 
     rows.forEach((row) => {
-      let val = String(row[statusCol] ?? "").trim();
+      let val = String(getStatusValue(row, statusCol) ?? "").trim();
       if (!val) val = "(Kosong)";
       else withStatus++;
       counts[val] = (counts[val] || 0) + 1;
@@ -209,6 +302,7 @@ app.get("/api/stats/:sheet", async (req, res) => {
     res.json({
       sheet: sheetName,
       statusColumn: statusCol,
+      resolvedColumn: resolvedCol,
       total: rows.length,
       withStatus,
       breakdown,
@@ -228,7 +322,7 @@ app.get("/api/stats-all", async (req, res) => {
       const counts = {};
       let withStatus = 0;
       rows.forEach((row) => {
-        let val = String(row[statusCol] ?? "").trim();
+        let val = String(getStatusValue(row, statusCol) ?? "").trim();
         if (!val) val = "(Kosong)";
         else withStatus++;
         counts[val] = (counts[val] || 0) + 1;
@@ -255,6 +349,29 @@ app.get("/api/stats-all", async (req, res) => {
     }
   }
   res.json(result);
+});
+
+// Debug: cek header asli, jumlah baris, dan beberapa sample data
+app.get("/api/debug/:sheet", async (req, res) => {
+  const sheetName = req.params.sheet.toUpperCase();
+  if (!SHEET_NAMES.includes(sheetName)) {
+    return res.status(404).json({ error: `Sheet "${sheetName}" tidak dikenal.` });
+  }
+  try {
+    const rows = await getSheetData(sheetName, true); // selalu fresh
+    const statusCol = STATUS_COLUMN[sheetName];
+    const resolvedCol = resolveStatusColumn(rows[0], statusCol);
+    res.json({
+      sheet: sheetName,
+      totalRowsFetched: rows.length,
+      columnsDetected: rows.length > 0 ? Object.keys(rows[0]) : [],
+      statusColumnExpected: statusCol,
+      statusColumnResolved: resolvedCol,
+      sampleRows: rows.slice(0, 5),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));

@@ -347,8 +347,8 @@ async function loadStats() {
     const res = await fetch(`/api/stats/${currentSheet}`);
     const json = await res.json();
 
-    document.getElementById("chartTitleBar").textContent = `Distribusi "${json.statusColumn}" (Bar Chart)`;
-    document.getElementById("chartTitleDonut").textContent = `Proporsi "${json.statusColumn}" (Donut Chart)`;
+    document.getElementById("chartTitleBar").textContent = `Distribusi "${json.resolvedColumn || json.statusColumn}" (Bar Chart)`;
+    document.getElementById("chartTitleDonut").textContent = `Proporsi "${json.resolvedColumn || json.statusColumn}" (Donut Chart)`;
 
     if (json.error) {
       statsGrid.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ ${json.error}</div>`;
