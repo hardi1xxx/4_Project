@@ -137,7 +137,7 @@ const STATUS_GROUPS = {
       "0.1 Need Confirm by Tsel",
       "0.2 Confirmed Batal by Tsel",
     ],
-    OLO: ["00.1 Need Confirm", "10. UT", "00.2 Confirmed Batal", "01. Drop", "00. Plan Drop"],
+    OLO: ["00.1 Need Confirm", "10. UT", "00.2 Confirmed Batal", "01. Drop", "00. Plan Drop", "00.3 Drop MOM"],
     HEM: ["19. READY PT1", "20. DROP", "18. PLAN DROP"],
   },
 };
@@ -637,6 +637,18 @@ app.get("/api/group-debug", async (req, res) => {
   res.json(result);
 });
 
+// Kebalikan dari colLetterToIndex: index berbasis 0 -> huruf kolom (A, B, ..., Z, AA, ...)
+function colIndexToLetter(index) {
+  let n = index + 1;
+  let letter = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    letter = String.fromCharCode(65 + rem) + letter;
+    n = Math.floor((n - 1) / 26);
+  }
+  return letter;
+}
+
 // Debug: cek header asli, jumlah baris, dan beberapa sample data
 app.get("/api/debug/:sheet", async (req, res) => {
   const sheetName = req.params.sheet.toUpperCase();
@@ -653,15 +665,32 @@ app.get("/api/debug/:sheet", async (req, res) => {
     const keys = rows.length > 0 ? Object.keys(rows[0]) : [];
     const { candidates, tier } = findCandidateColumns(keys, statusCol);
 
+    // Peta SEMUA kolom -> huruf kolom, supaya bisa dicek manual dengan mudah
+    // tanpa hitung sendiri (cocokkan dengan tampilan asli di Google Sheets).
+    const allColumnsWithLetters = headers.map((h, i) => ({
+      letter: colIndexToLetter(i),
+      index: i,
+      header: h,
+    }));
+
+    // Jumlah nilai unik & contoh nilai untuk kolom yang sedang dipakai sebagai
+    // status (resolvedCol) — kalau cuma 1 nilai unik untuk ratusan baris,
+    // kemungkinan besar kolom yang diambil SALAH (bukan kolom status asli).
+    const distinctValues = new Set();
+    rows.forEach((r) => distinctValues.add(String(r[resolvedCol] ?? "").trim()));
+
     res.json({
       sheet: sheetName,
       totalRowsFetched: rows.length,
       columnsDetected: headers,
+      allColumnsWithLetters, // <-- cek ini untuk pastikan huruf kolom status benar
       statusColumnExpected: statusCol,
       statusColumnLetter: letter || null,
       statusColumnLetterIndex: letterIdx,
       headerAtThatLetter: letterIdx >= 0 && letterIdx < headers.length ? headers[letterIdx] : null,
       statusColumnResolved: resolvedCol,
+      distinctValuesInResolvedColumn: distinctValues.size,
+      sampleDistinctValues: Array.from(distinctValues).slice(0, 15),
       candidateColumnsByName: candidates, // kandidat kalau resolve by-name dipakai (fallback)
       matchTier: tier,
       sampleRows: rows.slice(0, 5),

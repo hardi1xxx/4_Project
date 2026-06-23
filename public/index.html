@@ -533,38 +533,52 @@ function renderCharts(breakdown) {
     return;
   }
 
-  const labels = breakdown.map((b) => b.status);
-  const data = breakdown.map((b) => b.count);
-  const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
+  try {
+    const labels = breakdown.map((b) => b.status);
+    const data = breakdown.map((b) => b.count);
+    const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
 
-  if (barChartInstance) barChartInstance.destroy();
-  if (donutChartInstance) donutChartInstance.destroy();
+    if (barChartInstance) { barChartInstance.destroy(); barChartInstance = null; }
+    if (donutChartInstance) { donutChartInstance.destroy(); donutChartInstance = null; }
 
-  const barCtx = document.getElementById("barChart").getContext("2d");
-  barChartInstance = new Chart(barCtx, {
-    type: "bar",
-    data: { labels, datasets: [{ label: "Jumlah", data, backgroundColor: colors, borderRadius: 6 }] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: "#1e293b", font: { size: 11 } }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
+    const barCtx = document.getElementById("barChart").getContext("2d");
+    barChartInstance = new Chart(barCtx, {
+      type: "bar",
+      data: { labels, datasets: [{ label: "Jumlah", data, backgroundColor: colors, borderRadius: 6 }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#1e293b", font: { size: 11 } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
+        },
       },
-    },
-  });
+    });
 
-  const donutCtx = document.getElementById("donutChart").getContext("2d");
-  donutChartInstance = new Chart(donutCtx, {
-    type: "doughnut",
-    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: "#ffffff" }] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "right", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11 } } } },
-    },
-  });
+    const donutCtx = document.getElementById("donutChart").getContext("2d");
+    donutChartInstance = new Chart(donutCtx, {
+      type: "doughnut",
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: "#ffffff" }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: "right", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11 } } } },
+      },
+    });
+
+    requestAnimationFrame(() => {
+      barChartInstance && barChartInstance.resize();
+      donutChartInstance && donutChartInstance.resize();
+      setTimeout(() => {
+        barChartInstance && barChartInstance.resize();
+        donutChartInstance && donutChartInstance.resize();
+      }, 150);
+    });
+  } catch (err) {
+    console.error("Gagal render grafik sheet:", err);
+    document.getElementById("barChart").parentElement.innerHTML = `<div class="error">⚠️ Gagal menampilkan grafik: ${escapeHtml(err.message)}</div>`;
+  }
 }
 
 function buildQuery(refresh) {
@@ -890,38 +904,66 @@ function renderSummary(statsAll, fromCache) {
 }
 
 function renderSummaryCompareChart(perSheetCalc) {
-  if (typeof Chart === "undefined") return;
+  const wrapEl = document.getElementById("summaryCompareChart")?.parentElement;
+  if (typeof Chart === "undefined") {
+    if (wrapEl) wrapEl.innerHTML = '<div class="error">⚠️ Library grafik (Chart.js) gagal dimuat. Coba refresh halaman (Ctrl+Shift+R) atau cek path file chart_umd.js di server.</div>';
+    return;
+  }
 
-  const labels = SHEETS;
-  const testcomData = SHEETS.map((s) => perSheetCalc[s].testcom);
-  const dropData = SHEETS.map((s) => perSheetCalc[s].drop);
-  const progressData = SHEETS.map((s) => perSheetCalc[s].progress);
+  try {
+    const labels = SHEETS;
+    const testcomData = SHEETS.map((s) => perSheetCalc[s].testcom);
+    const dropData = SHEETS.map((s) => perSheetCalc[s].drop);
+    const progressData = SHEETS.map((s) => perSheetCalc[s].progress);
 
-  if (summaryCompareChartInstance) summaryCompareChartInstance.destroy();
+    if (summaryCompareChartInstance) {
+      summaryCompareChartInstance.destroy();
+      summaryCompareChartInstance = null;
+    }
 
-  const ctx = document.getElementById("summaryCompareChart").getContext("2d");
-  summaryCompareChartInstance = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        { label: "Testcom/Golive", data: testcomData, backgroundColor: "#16a34a", borderRadius: 6 },
-        { label: "Kendala/Drop", data: dropData, backgroundColor: "#dc2626", borderRadius: 6 },
-        { label: "Progress", data: progressData, backgroundColor: "#2563eb", borderRadius: 6 },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: "top", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11.5 } } },
+    // Pastikan canvas ada lagi (kalau sebelumnya diganti innerHTML oleh pesan error)
+    if (!document.getElementById("summaryCompareChart")) {
+      wrapEl.innerHTML = '<canvas id="summaryCompareChart"></canvas>';
+    }
+
+    const ctx = document.getElementById("summaryCompareChart").getContext("2d");
+    summaryCompareChartInstance = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [
+          { label: "Testcom/Golive", data: testcomData, backgroundColor: "#16a34a", borderRadius: 6 },
+          { label: "Kendala/Drop", data: dropData, backgroundColor: "#dc2626", borderRadius: 6 },
+          { label: "Progress", data: progressData, backgroundColor: "#2563eb", borderRadius: 6 },
+        ],
       },
-      scales: {
-        x: { ticks: { color: "#1e293b", font: { size: 12, weight: "700" } }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "top", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11.5 } } },
+        },
+        scales: {
+          x: { ticks: { color: "#1e293b", font: { size: 12, weight: "700" } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
+        },
       },
-    },
-  });
+    });
+
+    // PENTING: kalau chart dibuat saat parent-nya masih display:none (atau baru
+    // saja jadi visible), Chart.js kadang salah ukur ukuran canvas (0x0) dan
+    // grafik jadi tidak kelihatan walau tidak error. Paksa resize 2x setelah
+    // browser selesai layout, supaya ukurannya benar.
+    requestAnimationFrame(() => {
+      summaryCompareChartInstance && summaryCompareChartInstance.resize();
+      setTimeout(() => {
+        summaryCompareChartInstance && summaryCompareChartInstance.resize();
+      }, 150);
+    });
+  } catch (err) {
+    console.error("Gagal render grafik ringkasan:", err);
+    if (wrapEl) wrapEl.innerHTML = `<div class="error">⚠️ Gagal menampilkan grafik: ${escapeHtml(err.message)}</div>`;
+  }
 }
 
 // ============================================================
