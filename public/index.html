@@ -237,6 +237,67 @@
     border: 1px solid #bfdbfe;
   }
   footer { text-align: center; color: var(--muted); font-size: 12px; padding: 16px; }
+
+  .tab.summary-tab { border-color: var(--accent); }
+  .tab.summary-tab.active { color: var(--accent); }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin: 18px 0;
+  }
+  .summary-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+  .summary-card h3 {
+    margin: 0 0 4px;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .summary-card .total-line {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .summary-card .total-line b { color: var(--accent); font-size: 15px; }
+  .summary-card .breakdown-list { list-style: none; margin: 0; padding: 0; }
+  .summary-card .breakdown-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--panel-soft);
+    font-size: 13px;
+  }
+  .summary-card .breakdown-list li:last-child { border-bottom: none; }
+  .summary-card .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .summary-card .breakdown-list .name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .summary-card .breakdown-list .cnt { font-weight: 700; color: var(--text); }
+  .summary-card .breakdown-list .pct { color: var(--muted); font-size: 11.5px; min-width: 42px; text-align: right; }
+  .summary-card .err { color: var(--red); font-size: 13px; }
+  .summary-overall {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .summary-overall .item .label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+  .summary-overall .item .val { font-size: 26px; font-weight: 800; color: var(--accent); margin-top: 4px; }
+  .cache-note { font-size: 11.5px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -264,7 +325,12 @@
 
 <div class="tabs" id="tabs"></div>
 
-<div class="content">
+<div class="content" id="summaryContent" style="display:none;">
+  <div class="summary-overall" id="summaryOverall"></div>
+  <div class="summary-grid" id="summaryGrid"></div>
+</div>
+
+<div class="content" id="sheetContent">
 
   <div class="stats-grid" id="statsGrid"></div>
 
@@ -302,8 +368,9 @@
 
 <script>
 const SHEETS = ["MBB", "OLO", "HEM", "FBB", "PT2"];
+const SUMMARY_KEY = "__SUMMARY__";
 
-let currentSheet = SHEETS[0];
+let currentSheet = SHEETS[0]; // currentSheet can also be SUMMARY_KEY
 let activeFilters = {};
 let currentColumns = [];
 let barChartInstance = null;
@@ -317,35 +384,84 @@ const tableArea = document.getElementById("tableArea");
 const metaInfo = document.getElementById("metaInfo");
 const lastUpdatedEl = document.getElementById("lastUpdated");
 const statsGrid = document.getElementById("statsGrid");
+const sheetContentEl = document.getElementById("sheetContent");
+const summaryContentEl = document.getElementById("summaryContent");
+const summaryGridEl = document.getElementById("summaryGrid");
+const summaryOverallEl = document.getElementById("summaryOverall");
 
 const PALETTE = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#64748b", "#db2777"];
 const CARD_CLASSES = ["c0", "c1", "c2", "c3", "c4"];
 
+// ============================================================
+// CACHE LAYER (di sisi browser)
+// Tujuan: pindah tab TIDAK memanggil ulang API kalau data masih segar.
+// Data hanya benar2 di-refetch kalau sudah lewat CACHE_TTL_MS (60 detik)
+// atau user klik tombol "Refresh Data" secara manual.
+// ============================================================
+const CACHE_TTL_MS = 60 * 1000;
+const cache = {
+  perSheet: {},   // { MBB: { data: {...}, stats: {...}, ts: number } }
+  summary: null,  // { statsAll: {...}, ts: number }
+};
+
+function isCacheFresh(ts) {
+  return ts && (Date.now() - ts) < CACHE_TTL_MS;
+}
+
 function renderTabs() {
   tabsEl.innerHTML = "";
+
+  const summaryTab = document.createElement("div");
+  summaryTab.className = "tab summary-tab" + (currentSheet === SUMMARY_KEY ? " active" : "");
+  summaryTab.textContent = "📋 Ringkasan";
+  summaryTab.onclick = () => switchTab(SUMMARY_KEY);
+  tabsEl.appendChild(summaryTab);
+
   SHEETS.forEach((s) => {
     const div = document.createElement("div");
     div.className = "tab" + (s === currentSheet ? " active" : "");
     div.textContent = s;
-    div.onclick = () => {
-      currentSheet = s;
-      activeFilters = {};
-      searchInput.value = "";
-      renderTabs();
-      loadAll();
-    };
+    div.onclick = () => switchTab(s);
     tabsEl.appendChild(div);
   });
 }
 
-async function loadAll() {
-  await Promise.all([loadStats(), loadData()]);
+function switchTab(sheetOrSummary) {
+  currentSheet = sheetOrSummary;
+  activeFilters = {};
+  searchInput.value = "";
+  renderTabs();
+  if (currentSheet === SUMMARY_KEY) {
+    sheetContentEl.style.display = "none";
+    summaryContentEl.style.display = "block";
+    loadSummary(); // pakai cache kalau masih segar
+  } else {
+    summaryContentEl.style.display = "none";
+    sheetContentEl.style.display = "block";
+    loadAll(); // pakai cache kalau masih segar
+  }
 }
 
-async function loadStats() {
+// ============================================================
+// HALAMAN PER-SHEET (pakai cache)
+// ============================================================
+async function loadAll(forceRefresh = false) {
+  await Promise.all([loadStats(forceRefresh), loadData(forceRefresh)]);
+}
+
+async function loadStats(forceRefresh = false) {
   try {
-    const res = await fetch(`/api/stats/${currentSheet}`);
-    const json = await res.json();
+    const cached = cache.perSheet[currentSheet];
+    let json;
+    if (!forceRefresh && cached && cached.stats && isCacheFresh(cached.statsTs)) {
+      json = cached.stats;
+    } else {
+      const res = await fetch(`/api/stats/${currentSheet}`);
+      json = await res.json();
+      cache.perSheet[currentSheet] = cache.perSheet[currentSheet] || {};
+      cache.perSheet[currentSheet].stats = json;
+      cache.perSheet[currentSheet].statsTs = Date.now();
+    }
 
     document.getElementById("chartTitleBar").textContent = `Distribusi "${json.resolvedColumn || json.statusColumn}" (Bar Chart)`;
     document.getElementById("chartTitleDonut").textContent = `Proporsi "${json.resolvedColumn || json.statusColumn}" (Donut Chart)`;
@@ -426,11 +542,30 @@ function buildQuery(refresh) {
   return params.toString();
 }
 
-async function loadData(refresh = false) {
+// loadData menerima parameter forceRefresh (klik tombol Refresh) ATAU
+// dipanggil ulang karena search/filter berubah (selalu fetch baru karena
+// kombinasi search/filter berbeda dengan yang di-cache).
+async function loadData(forceRefresh = false) {
+  const hasSearchOrFilter = !!searchInput.value.trim() || Object.keys(activeFilters).length > 0;
+  const cached = cache.perSheet[currentSheet];
+
+  // Hanya pakai cache kalau: tidak force refresh, tidak ada search/filter aktif,
+  // dan data cache masih segar (<60s).
+  if (!forceRefresh && !hasSearchOrFilter && cached && cached.data && isCacheFresh(cached.dataTs)) {
+    const json = cached.data;
+    currentColumns = json.columns;
+    populateFilterColumnOptions(json.columns);
+    renderActiveFilters();
+    renderTable(json.columns, json.rows);
+    metaInfo.innerHTML = `Menampilkan <span class="badge">${json.total}</span> baris pada sheet <b>${json.sheet}</b> <span class="cache-note">(dari cache)</span>`;
+    lastUpdatedEl.textContent = "Data terakhir: " + new Date(json.lastUpdated).toLocaleString("id-ID");
+    return;
+  }
+
   tableArea.innerHTML = '<div class="loading">Memuat data...</div>';
   metaInfo.textContent = "Memuat...";
   try {
-    const qs = buildQuery(refresh);
+    const qs = buildQuery(forceRefresh);
     const res = await fetch(`/api/data/${currentSheet}?${qs}`);
     const json = await res.json();
 
@@ -438,6 +573,14 @@ async function loadData(refresh = false) {
       tableArea.innerHTML = `<div class="error">⚠️ ${json.error}</div>`;
       metaInfo.textContent = "Gagal memuat data";
       return;
+    }
+
+    // Simpan ke cache hanya kalau tidak ada search/filter aktif
+    // (supaya cache selalu berisi data "polos" per sheet)
+    if (!hasSearchOrFilter) {
+      cache.perSheet[currentSheet] = cache.perSheet[currentSheet] || {};
+      cache.perSheet[currentSheet].data = json;
+      cache.perSheet[currentSheet].dataTs = Date.now();
     }
 
     currentColumns = json.columns;
@@ -545,6 +688,98 @@ function escapeHtml(str) {
   return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// ============================================================
+// HALAMAN EXECUTIVE SUMMARY (Ringkasan)
+// Menampilkan ringkasan tiap sheet/project: total baris + breakdown status.
+// Juga pakai cache 60 detik supaya tidak fetch ulang tiap pindah tab.
+// ============================================================
+async function loadSummary(forceRefresh = false) {
+  if (!forceRefresh && cache.summary && isCacheFresh(cache.summary.ts)) {
+    renderSummary(cache.summary.statsAll, true);
+    return;
+  }
+
+  summaryGridEl.innerHTML = '<div class="loading" style="grid-column:1/-1">Memuat ringkasan...</div>';
+  summaryOverallEl.innerHTML = "";
+  try {
+    const res = await fetch("/api/stats-all");
+    const statsAll = await res.json();
+    cache.summary = { statsAll, ts: Date.now() };
+    renderSummary(statsAll, false);
+  } catch (err) {
+    summaryGridEl.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ Gagal memuat ringkasan: ${err.message}</div>`;
+  }
+}
+
+function renderSummary(statsAll, fromCache) {
+  // Kartu ringkasan keseluruhan (total semua project)
+  let grandTotal = 0;
+  let errorCount = 0;
+  SHEETS.forEach((s) => {
+    const d = statsAll[s];
+    if (!d) return;
+    if (d.error) errorCount++;
+    grandTotal += d.total || 0;
+  });
+
+  summaryOverallEl.innerHTML = `
+    <div class="item">
+      <div class="label">Total Project Dimonitor</div>
+      <div class="val">${SHEETS.length}</div>
+    </div>
+    <div class="item">
+      <div class="label">Total Baris Data (Semua Project)</div>
+      <div class="val">${grandTotal}</div>
+    </div>
+    <div class="item">
+      <div class="label">Project Bermasalah / Error</div>
+      <div class="val" style="color:${errorCount > 0 ? 'var(--red)' : 'var(--green)'}">${errorCount}</div>
+    </div>
+    <div class="item">
+      <div class="label">Status Cache</div>
+      <div class="val" style="font-size:14px; color:var(--muted);">${fromCache ? "📦 Dari cache" : "🔄 Baru di-fetch"}</div>
+    </div>
+  `;
+
+  summaryGridEl.innerHTML = "";
+  SHEETS.forEach((sheetName) => {
+    const d = statsAll[sheetName];
+    const card = document.createElement("div");
+    card.className = "summary-card";
+
+    if (!d || d.error) {
+      card.innerHTML = `
+        <h3>${sheetName}</h3>
+        <div class="err">⚠️ ${d ? escapeHtml(d.error) : "Data tidak tersedia"}</div>
+      `;
+      summaryGridEl.appendChild(card);
+      return;
+    }
+
+    const topItems = d.breakdown.slice(0, 6);
+    const itemsHtml = topItems.map((item, i) => {
+      const pct = d.total > 0 ? ((item.count / d.total) * 100).toFixed(1) : "0.0";
+      const color = PALETTE[i % PALETTE.length];
+      return `<li>
+        <span class="dot" style="background:${color}"></span>
+        <span class="name" title="${escapeHtml(item.status)}">${escapeHtml(item.status)}</span>
+        <span class="cnt">${item.count}</span>
+        <span class="pct">${pct}%</span>
+      </li>`;
+    }).join("");
+
+    card.innerHTML = `
+      <h3>${sheetName} <span class="badge">${d.total}</span></h3>
+      <div class="total-line">Kolom status: <b>${escapeHtml(d.statusColumn)}</b> · ${d.withStatus} dari ${d.total} baris terisi</div>
+      <ul class="breakdown-list">${itemsHtml || '<li class="name">Tidak ada data</li>'}</ul>
+    `;
+    summaryGridEl.appendChild(card);
+  });
+}
+
+// ============================================================
+// EVENT HANDLERS
+// ============================================================
 document.getElementById("searchBtn").onclick = () => loadData();
 searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadData(); });
 document.getElementById("clearBtn").onclick = () => {
@@ -553,16 +788,35 @@ document.getElementById("clearBtn").onclick = () => {
   renderActiveFilters();
   loadData();
 };
-document.getElementById("refreshBtn").onclick = () => loadAll();
+document.getElementById("refreshBtn").onclick = () => {
+  if (currentSheet === SUMMARY_KEY) {
+    loadSummary(true);
+  } else {
+    loadAll(true);
+  }
+};
 filterColumnSelect.onchange = () => {
   const col = filterColumnSelect.value;
   filterColumnSelect.value = "";
   if (col) addFilter(col);
 };
 
+// ============================================================
+// INIT + AUTO REFRESH
+// Auto-refresh tiap 60 detik HANYA untuk tab/halaman yang sedang aktif
+// dilihat user (bukan semua sheet sekaligus). Pindah tab antar halaman
+// lain TIDAK memicu fetch baru selama cache < 60 detik.
+// ============================================================
 renderTabs();
 loadAll();
-setInterval(() => loadAll(), 60000);
+
+setInterval(() => {
+  if (currentSheet === SUMMARY_KEY) {
+    loadSummary(true);
+  } else {
+    loadAll(true);
+  }
+}, CACHE_TTL_MS);
 </script>
 </body>
 </html>
