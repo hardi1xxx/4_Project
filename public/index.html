@@ -463,8 +463,8 @@ async function loadStats(forceRefresh = false) {
       cache.perSheet[currentSheet].statsTs = Date.now();
     }
 
-    document.getElementById("chartTitleBar").textContent = `Distribusi "${json.resolvedColumn || json.statusColumn}" (Bar Chart)`;
-    document.getElementById("chartTitleDonut").textContent = `Proporsi "${json.resolvedColumn || json.statusColumn}" (Donut Chart)`;
+    document.getElementById("chartTitleBar").textContent = `Distribusi Grouping Status (Bar Chart)`;
+    document.getElementById("chartTitleDonut").textContent = `Proporsi Grouping Status (Donut Chart)`;
 
     if (json.error) {
       statsGrid.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ ${json.error}</div>`;
@@ -477,7 +477,7 @@ async function loadStats(forceRefresh = false) {
     totalCard.innerHTML = `<div class="label">Total ${json.sheet}</div><div class="num">${json.total}</div><div class="pct">Seluruh baris data</div>`;
     statsGrid.appendChild(totalCard);
 
-    json.breakdown.slice(0, 7).forEach((item, i) => {
+    json.breakdown.forEach((item, i) => {
       const pct = json.total > 0 ? ((item.count / json.total) * 100).toFixed(1) : "0.0";
       const card = document.createElement("div");
       card.className = "stat-card " + (CARD_CLASSES[i % CARD_CLASSES.length]);
@@ -756,7 +756,7 @@ function renderSummary(statsAll, fromCache) {
       return;
     }
 
-    const topItems = d.breakdown.slice(0, 6);
+    const topItems = d.breakdown;
     const itemsHtml = topItems.map((item, i) => {
       const pct = d.total > 0 ? ((item.count / d.total) * 100).toFixed(1) : "0.0";
       const color = PALETTE[i % PALETTE.length];

@@ -29,6 +29,150 @@ const STATUS_COLUMN = {
   PT2: "STATUS LOP",
 };
 
+// ============================================================
+// GROUPING STATUS
+// Memetakan nilai status mentah (yang ada di tiap sheet) ke kategori
+// standar yang sama untuk semua project, supaya kartu & grafik bisa
+// dibandingkan apple-to-apple lintas sheet.
+// Urutan GROUP_ORDER menentukan urutan tampil di kartu/grafik (urutan
+// funnel proses, bukan urutan jumlah terbanyak).
+// ============================================================
+const GROUP_ORDER = [
+  "APPROVAL",
+  "SURVEY/PERIJINAN",
+  "PERSIAPAN",
+  "MATDEV",
+  "INSTALASI",
+  "FINISH INSTAL",
+  "TESTCOM/GOLIVE",
+  "Kendala/DROP",
+];
+
+const STATUS_GROUPS = {
+  "APPROVAL": {
+    FBB: [],
+    PT2: ["1.DESIGN", "2.APPROVAL"],
+    MBB: ["2. L0 DRM"],
+    OLO: ["01. Approval IHLD", "03. DRM", "13. HOLD"],
+    HEM: ["00. NEED APPROVAL", "02. REDESIGN", "17. HOLD"],
+  },
+  "SURVEY/PERIJINAN": {
+    FBB: ["01. PERIJINAN"],
+    PT2: [],
+    MBB: ["1. L0 Survey", "1.1 Done Survey", "3. L0 Progress Perizinan"],
+    OLO: ["02. Survey", "04. Perizinan"],
+    HEM: ["04. PERIZINAN"],
+  },
+  "PERSIAPAN": {
+    FBB: ["02. PERSIAPAN"],
+    PT2: [],
+    MBB: [],
+    OLO: [],
+    HEM: ["03. PERSIAPAN"],
+  },
+  "MATDEV": {
+    FBB: ["03. MATDEV"],
+    PT2: [],
+    MBB: ["4. L0 Material Delivery"],
+    OLO: ["05. Matdel"],
+    HEM: ["05. MATERIAL DELIVERY"],
+  },
+  "INSTALASI": {
+    FBB: ["04. INSTALASI"],
+    PT2: ["3.OGP DEPLOY"],
+    MBB: ["5.0 L0 Progress FO"],
+    OLO: ["06. Instalasi"],
+    HEM: ["06. OGP INSTALASI"],
+  },
+  "FINISH INSTAL": {
+    FBB: ["05. FINISH INSTALASI"],
+    PT2: ["4.FINISH INSTALL"],
+    MBB: ["6. L0 Ready", "7. L1 Ready"],
+    OLO: ["07. Finish Instalasi"],
+    HEM: ["07. FINISH INSTALASI"],
+  },
+  "TESTCOM/GOLIVE": {
+    FBB: ["06. GOLIVE", "07. UT", "08. PEMBERKASAN", "09. REKON", "10. BAST"],
+    PT2: ["5.GOLIVE"],
+    MBB: ["7. L3. OA Confirmation", "5.1 L0 Progress - Issue BTS"],
+    OLO: ["08. Golive", "15. OA (JT)", "16. OA (PT1)"],
+    HEM: ["09. UT", "10. GOLIVE", "11. REKON", "BAST"],
+  },
+  "Kendala/DROP": {
+    FBB: ["10.1 BAST 2025", "00. DROP"],
+    PT2: ["0.DROP", "0.KENDALA"],
+    MBB: [
+      "0. HOLD",
+      "0.1 Proposed Drop",
+      "0.2 L0 Drop",
+      "0.3 Drop MoM",
+      "0.1 Need Confirm by Tsel",
+      "0.2 Confirmed Batal by Tsel",
+    ],
+    OLO: ["00.1 Need Confirm", "10. UT", "00.2 Confirmed Batal", "01. Drop", "00. Plan Drop"],
+    HEM: ["19. READY PT1", "20. DROP", "18. PLAN DROP"],
+  },
+};
+
+// Normalisasi teks status untuk pencocokan ketat (case/spasi diabaikan)
+function normalizeStatusText(str) {
+  return String(str ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+// Normalisasi "longgar": buang semua spasi & titik, untuk menangani
+// perbedaan penulisan kecil seperti "3.OGP DEPLOY" vs "3. OGP DEPLOY"
+function normalizeStatusTextLoose(str) {
+  return normalizeStatusText(str).replace(/[\s.]+/g, "");
+}
+
+// Bangun lookup table sekali di awal: per sheet, dari nilai status mentah
+// (yang sudah dinormalisasi) -> nama grup
+function buildGroupLookups() {
+  const lookups = {};
+  SHEET_NAMES.forEach((sheet) => {
+    lookups[sheet] = { exact: new Map(), loose: new Map() };
+  });
+
+  Object.entries(STATUS_GROUPS).forEach(([groupName, perSheet]) => {
+    Object.entries(perSheet).forEach(([sheet, values]) => {
+      if (!lookups[sheet]) return;
+      values.forEach((v) => {
+        lookups[sheet].exact.set(normalizeStatusText(v), groupName);
+        lookups[sheet].loose.set(normalizeStatusTextLoose(v), groupName);
+      });
+    });
+  });
+
+  return lookups;
+}
+
+const GROUP_LOOKUPS = buildGroupLookups();
+const UNGROUPED_LABEL = "Lainnya / Belum Dipetakan";
+
+// Cari grup untuk satu nilai status mentah pada sheet tertentu.
+// Strategi: exact match (setelah normalisasi) -> loose match (tanpa
+// spasi/titik) -> kalau tidak ketemu sama sekali, masuk kategori
+// "Lainnya / Belum Dipetakan" (supaya kelihatan kalau ada nilai baru
+// di spreadsheet yang belum dimasukkan ke STATUS_GROUPS).
+function getStatusGroup(sheetName, rawValue) {
+  const raw = String(rawValue ?? "").trim();
+  if (!raw) return "(Kosong)";
+
+  const lookup = GROUP_LOOKUPS[sheetName];
+  if (!lookup) return UNGROUPED_LABEL;
+
+  const exactKey = normalizeStatusText(raw);
+  if (lookup.exact.has(exactKey)) return lookup.exact.get(exactKey);
+
+  const looseKey = normalizeStatusTextLoose(raw);
+  if (lookup.loose.has(looseKey)) return lookup.loose.get(looseKey);
+
+  return UNGROUPED_LABEL;
+}
+
 // Cache sederhana di memori supaya tidak terus-menerus menghantam Google
 const cache = {
   data: {},     // { MBB: [...rows], OLO: [...rows], ... }
@@ -177,6 +321,51 @@ async function getSheetData(sheetName, forceRefresh = false) {
   return rows;
 }
 
+// Hitung breakdown status untuk satu sheet, dalam 2 bentuk:
+// - breakdown      : sudah dikelompokkan ke 8 kategori standar (GROUP_ORDER),
+//                     diurutkan sesuai urutan funnel proses (bukan jumlah terbanyak)
+// - rawBreakdown    : nilai status mentah asli dari spreadsheet (untuk debug)
+// - unmatchedValues : nilai mentah yang TIDAK ketemu mapping-nya di STATUS_GROUPS
+//                     (kalau ada, berarti ada nilai baru di sheet yang perlu
+//                     ditambahkan ke mapping)
+function computeStatusBreakdown(sheetName, rows, statusCol) {
+  const groupCounts = {};
+  const rawCounts = {};
+  const unmatched = {};
+  let withStatus = 0;
+
+  rows.forEach((row) => {
+    let val = String(getStatusValue(row, statusCol) ?? "").trim();
+    if (!val) val = "(Kosong)";
+    else withStatus++;
+
+    rawCounts[val] = (rawCounts[val] || 0) + 1;
+
+    const group = getStatusGroup(sheetName, val);
+    groupCounts[group] = (groupCounts[group] || 0) + 1;
+
+    if (group === UNGROUPED_LABEL && val !== "(Kosong)") {
+      unmatched[val] = (unmatched[val] || 0) + 1;
+    }
+  });
+
+  // Urutkan breakdown grup sesuai GROUP_ORDER, lalu "(Kosong)", lalu "Lainnya"
+  const orderedGroupNames = [...GROUP_ORDER, "(Kosong)", UNGROUPED_LABEL];
+  const breakdown = orderedGroupNames
+    .filter((g) => groupCounts[g] !== undefined)
+    .map((g) => ({ status: g, count: groupCounts[g] }));
+
+  const rawBreakdown = Object.entries(rawCounts)
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const unmatchedValues = Object.entries(unmatched)
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return { breakdown, rawBreakdown, unmatchedValues, withStatus };
+}
+
 // ============================================================
 // API ROUTES
 // ============================================================
@@ -285,19 +474,8 @@ app.get("/api/stats/:sheet", async (req, res) => {
     const rows = await getSheetData(sheetName);
     const statusCol = STATUS_COLUMN[sheetName];
     const resolvedCol = resolveStatusColumn(rows[0], statusCol);
-    const counts = {};
-    let withStatus = 0;
-
-    rows.forEach((row) => {
-      let val = String(getStatusValue(row, statusCol) ?? "").trim();
-      if (!val) val = "(Kosong)";
-      else withStatus++;
-      counts[val] = (counts[val] || 0) + 1;
-    });
-
-    const breakdown = Object.entries(counts)
-      .map(([status, count]) => ({ status, count }))
-      .sort((a, b) => b.count - a.count);
+    const { breakdown, rawBreakdown, unmatchedValues, withStatus } =
+      computeStatusBreakdown(sheetName, rows, statusCol);
 
     res.json({
       sheet: sheetName,
@@ -305,7 +483,9 @@ app.get("/api/stats/:sheet", async (req, res) => {
       resolvedColumn: resolvedCol,
       total: rows.length,
       withStatus,
-      breakdown,
+      breakdown,        // sudah dikelompokkan (dipakai kartu & grafik)
+      rawBreakdown,      // nilai mentah asli (untuk debug/detail)
+      unmatchedValues,   // nilai mentah yang belum ada mapping grup-nya
     });
   } catch (err) {
     res.status(500).json({ error: err.message, sheet: sheetName, statusColumn: STATUS_COLUMN[sheetName] });
@@ -319,23 +499,16 @@ app.get("/api/stats-all", async (req, res) => {
     const statusCol = STATUS_COLUMN[sheetName];
     try {
       const rows = await getSheetData(sheetName);
-      const counts = {};
-      let withStatus = 0;
-      rows.forEach((row) => {
-        let val = String(getStatusValue(row, statusCol) ?? "").trim();
-        if (!val) val = "(Kosong)";
-        else withStatus++;
-        counts[val] = (counts[val] || 0) + 1;
-      });
-      const breakdown = Object.entries(counts)
-        .map(([status, count]) => ({ status, count }))
-        .sort((a, b) => b.count - a.count);
+      const { breakdown, rawBreakdown, unmatchedValues, withStatus } =
+        computeStatusBreakdown(sheetName, rows, statusCol);
 
       result[sheetName] = {
         statusColumn: statusCol,
         total: rows.length,
         withStatus,
         breakdown,
+        rawBreakdown,
+        unmatchedValues,
         error: null,
       };
     } catch (err) {
@@ -344,8 +517,28 @@ app.get("/api/stats-all", async (req, res) => {
         total: 0,
         withStatus: 0,
         breakdown: [],
+        rawBreakdown: [],
+        unmatchedValues: [],
         error: err.message,
       };
+    }
+  }
+  res.json(result);
+});
+
+// Debug: lihat nilai status mentah yang BELUM ketemu mapping grup-nya,
+// untuk semua sheet sekaligus. Berguna kalau ada penambahan/typo status baru
+// di spreadsheet supaya bisa ditambahkan ke STATUS_GROUPS di server.js.
+app.get("/api/group-debug", async (req, res) => {
+  const result = {};
+  for (const sheetName of SHEET_NAMES) {
+    try {
+      const rows = await getSheetData(sheetName);
+      const statusCol = STATUS_COLUMN[sheetName];
+      const { unmatchedValues } = computeStatusBreakdown(sheetName, rows, statusCol);
+      result[sheetName] = unmatchedValues;
+    } catch (err) {
+      result[sheetName] = { error: err.message };
     }
   }
   res.json(result);
