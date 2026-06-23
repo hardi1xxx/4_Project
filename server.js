@@ -271,38 +271,74 @@ async function fetchSheetCSV(sheetName) {
   return records;
 }
 
-// Cari nilai kolom status dengan pencocokan fleksibel:
-// exact match -> case-insensitive/trim match -> partial contains match
-function getStatusValue(row, statusColName) {
-  if (row[statusColName] !== undefined) return row[statusColName];
-
+// Cari kandidat kolom yang cocok dengan nama target: gabungan exact match
+// (setelah normalisasi) DAN partial match (salah satu mengandung yang lain).
+// PENTING: kalau header ada duplikat (misal 2 kolom sama-sama bernama
+// "STATUS PEKERJAAN" di spreadsheet asli), parser akan rename yang kedua
+// jadi "STATUS PEKERJAAN_1". Itu TIDAK exact-match lagi, jadi harus tetap
+// ikut sebagai kandidat partial supaya tidak terlewat saat resolve kolom.
+function findCandidateColumns(keys, statusColName) {
   const target = normalizeKey(statusColName);
-  const keys = Object.keys(row);
 
-  // cocokkan exact setelah dinormalisasi (beda kapital/spasi)
-  let match = keys.find((k) => normalizeKey(k) === target);
-  if (match) return row[match];
-
-  // cocokkan partial (salah satu mengandung yang lain)
-  match = keys.find(
-    (k) => normalizeKey(k).includes(target) || target.includes(normalizeKey(k))
+  const exactMatches = keys.filter((k) => normalizeKey(k) === target);
+  const partialMatches = keys.filter(
+    (k) =>
+      normalizeKey(k) !== target &&
+      (normalizeKey(k).includes(target) || target.includes(normalizeKey(k)))
   );
-  if (match) return row[match];
 
-  return undefined;
+  const candidates = [...exactMatches, ...partialMatches];
+  const tier = exactMatches.length > 0 ? "exact+partial" : "partial-only";
+  return { candidates, exactMatches, partialMatches, tier };
 }
 
-function resolveStatusColumn(row, statusColName) {
-  if (!row) return statusColName;
-  if (row[statusColName] !== undefined) return statusColName;
-  const target = normalizeKey(statusColName);
-  const keys = Object.keys(row);
-  let match = keys.find((k) => normalizeKey(k) === target);
-  if (match) return match;
-  match = keys.find(
-    (k) => normalizeKey(k).includes(target) || target.includes(normalizeKey(k))
-  );
-  return match || statusColName;
+// Resolusi kolom status YANG BENAR dari seluruh dataset (bukan cuma 1 baris).
+// Kalau nama kolom yang di-set di STATUS_COLUMN cocok dengan LEBIH DARI SATU
+// kolom (misalnya ada kolom catatan/keterangan lain yang judulnya juga
+// mengandung kata "status pekerjaan", ATAU ada header duplikat yang
+// otomatis di-rename jadi "...COLNAME_1") — kode lama asal ambil kolom
+// exact-match PERTAMA yang ketemu tanpa cek variasi datanya. Ini bisa salah
+// ambil kolom yang isinya kebetulan seragam (itu sebabnya semua baris
+// kebaca 1 nilai yang sama terus, misal "00.3 Drop MoM").
+//
+// Fix: kumpulkan SEMUA kandidat (exact + partial, termasuk yang ada suffix
+// dedup seperti "_1"), lalu pilih kolom dengan VARIASI NILAI TERBANYAK
+// (distinct non-empty value count), karena kolom status asli pasti punya
+// banyak variasi nilai berbeda, sedangkan kolom yang salah biasanya
+// seragam/kosong/tidak relevan.
+function resolveStatusColumn(rows, statusColName) {
+  if (!rows || rows.length === 0) return statusColName;
+  const keys = Object.keys(rows[0]);
+
+  const { candidates } = findCandidateColumns(keys, statusColName);
+  if (candidates.length === 0) return statusColName;
+  if (candidates.length === 1) return candidates[0];
+
+  // Ambil sample (maks 500 baris) supaya tetap cepat untuk sheet besar
+  const sample = rows.length > 500 ? rows.slice(0, 500) : rows;
+
+  let bestCol = candidates[0];
+  let bestScore = -1;
+  candidates.forEach((col) => {
+    const distinct = new Set();
+    sample.forEach((r) => {
+      const v = String(r[col] ?? "").trim();
+      if (v) distinct.add(v);
+    });
+    if (distinct.size > bestScore) {
+      bestScore = distinct.size;
+      bestCol = col;
+    }
+  });
+
+  return bestCol;
+}
+
+// Ambil nilai status dari 1 baris, berdasarkan nama kolom yang SUDAH
+// di-resolve sebelumnya (lihat resolveStatusColumn). Tidak melakukan
+// pencocokan ulang per baris supaya hasilnya konsisten untuk semua baris.
+function getStatusValue(row, resolvedColumnName) {
+  return row[resolvedColumnName];
 }
 
 async function getSheetData(sheetName, forceRefresh = false) {
@@ -329,13 +365,15 @@ async function getSheetData(sheetName, forceRefresh = false) {
 //                     (kalau ada, berarti ada nilai baru di sheet yang perlu
 //                     ditambahkan ke mapping)
 function computeStatusBreakdown(sheetName, rows, statusCol) {
+  const resolvedCol = resolveStatusColumn(rows, statusCol);
+
   const groupCounts = {};
   const rawCounts = {};
   const unmatched = {};
   let withStatus = 0;
 
   rows.forEach((row) => {
-    let val = String(getStatusValue(row, statusCol) ?? "").trim();
+    let val = String(getStatusValue(row, resolvedCol) ?? "").trim();
     if (!val) val = "(Kosong)";
     else withStatus++;
 
@@ -363,7 +401,7 @@ function computeStatusBreakdown(sheetName, rows, statusCol) {
     .map(([status, count]) => ({ status, count }))
     .sort((a, b) => b.count - a.count);
 
-  return { breakdown, rawBreakdown, unmatchedValues, withStatus };
+  return { breakdown, rawBreakdown, unmatchedValues, withStatus, resolvedColumn: resolvedCol };
 }
 
 // ============================================================
@@ -473,14 +511,13 @@ app.get("/api/stats/:sheet", async (req, res) => {
   try {
     const rows = await getSheetData(sheetName);
     const statusCol = STATUS_COLUMN[sheetName];
-    const resolvedCol = resolveStatusColumn(rows[0], statusCol);
-    const { breakdown, rawBreakdown, unmatchedValues, withStatus } =
+    const { breakdown, rawBreakdown, unmatchedValues, withStatus, resolvedColumn } =
       computeStatusBreakdown(sheetName, rows, statusCol);
 
     res.json({
       sheet: sheetName,
       statusColumn: statusCol,
-      resolvedColumn: resolvedCol,
+      resolvedColumn,
       total: rows.length,
       withStatus,
       breakdown,        // sudah dikelompokkan (dipakai kartu & grafik)
@@ -553,13 +590,18 @@ app.get("/api/debug/:sheet", async (req, res) => {
   try {
     const rows = await getSheetData(sheetName, true); // selalu fresh
     const statusCol = STATUS_COLUMN[sheetName];
-    const resolvedCol = resolveStatusColumn(rows[0], statusCol);
+    const resolvedCol = resolveStatusColumn(rows, statusCol);
+    const keys = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const { candidates, tier } = findCandidateColumns(keys, statusCol);
+
     res.json({
       sheet: sheetName,
       totalRowsFetched: rows.length,
-      columnsDetected: rows.length > 0 ? Object.keys(rows[0]) : [],
+      columnsDetected: keys,
       statusColumnExpected: statusCol,
       statusColumnResolved: resolvedCol,
+      candidateColumns: candidates, // semua kolom yang namanya mirip statusColExpected
+      matchTier: tier,              // "exact" atau "partial"
       sampleRows: rows.slice(0, 5),
     });
   } catch (err) {
