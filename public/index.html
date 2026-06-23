@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Dashboard Monitoring Project</title>
-<script src="/vendor/chart.umd.js"></script>
+<script src="chart_umd.js"></script>
 <style>
   :root {
     --bg: #f4f6fb;
@@ -180,18 +180,45 @@
     font-size: 13px;
     max-width: 180px;
   }
-  .filters-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; width: 100%; }
-  .filter-chip {
-    display: flex;
-    gap: 4px;
-    align-items: center;
+  .filters-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; width: 100%; }
+  .filter-group {
     background: var(--accent-soft);
-    border-radius: 20px;
-    padding: 4px 6px 4px 12px;
+    border-radius: 12px;
+    padding: 8px 12px;
+    min-width: 200px;
+    max-width: 280px;
   }
-  .filter-chip span { font-size: 12px; color: #1e40af; font-weight: 600; }
-  .filter-chip select { border: none; background: transparent; font-size: 12px; color: #1e40af; max-width: 130px; }
-  .filter-chip button { border: none; background: transparent; color: #1e40af; padding: 2px 6px; font-size: 13px; }
+  .filter-group .fg-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .filter-group .fg-head span { font-size: 12px; color: #1e40af; font-weight: 700; }
+  .filter-group .fg-head .fg-actions { display: flex; gap: 6px; align-items: center; }
+  .filter-group .fg-head button.fg-remove {
+    border: none; background: transparent; color: #1e40af; font-size: 13px; cursor: pointer; padding: 0 2px;
+  }
+  .filter-group .fg-toggleall {
+    border: none; background: transparent; color: #1e40af; font-size: 10.5px; text-decoration: underline; cursor: pointer; padding: 0;
+  }
+  .filter-group .fg-options {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    max-height: 160px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .filter-group .fg-options label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .filter-group .fg-options input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
   .meta {
     margin: 14px 0 10px;
@@ -304,11 +331,11 @@
 
 <div class="brandbar">
   <div class="logos">
-    <img src="/logos/telkomakses.png" alt="Telkom Akses" />
+    <img src="telkomakses.png" alt="Telkom Akses" />
     <div class="divider"></div>
-    <img src="/logos/danantara.png" alt="Danantara Indonesia" />
+    <img src="danantara.png" alt="Danantara Indonesia" />
     <div class="divider"></div>
-    <img src="/logos/infranexia.png" alt="Infranexia" />
+    <img src="infranexia.png" alt="Infranexia" />
   </div>
   <div class="right">
     <span style="font-size:12px;color:var(--muted)" id="lastUpdated"></span>
@@ -327,6 +354,10 @@
 
 <div class="content" id="summaryContent" style="display:none;">
   <div class="summary-overall" id="summaryOverall"></div>
+  <div class="chart-card" style="margin-bottom:18px;">
+    <h3>Perbandingan 5 Project: Testcom/Golive vs Kendala/Drop vs Progress</h3>
+    <div class="chart-wrap" style="height:340px;"><canvas id="summaryCompareChart"></canvas></div>
+  </div>
   <div class="summary-grid" id="summaryGrid"></div>
 </div>
 
@@ -375,6 +406,7 @@ let activeFilters = {};
 let currentColumns = [];
 let barChartInstance = null;
 let donutChartInstance = null;
+let summaryCompareChartInstance = null;
 
 const tabsEl = document.getElementById("tabs");
 const searchInput = document.getElementById("searchInput");
@@ -395,10 +427,10 @@ const CARD_CLASSES = ["c0", "c1", "c2", "c3", "c4"];
 // ============================================================
 // CACHE LAYER (di sisi browser)
 // Tujuan: pindah tab TIDAK memanggil ulang API kalau data masih segar.
-// Data hanya benar2 di-refetch kalau sudah lewat CACHE_TTL_MS (60 detik)
+// Data hanya benar2 di-refetch kalau sudah lewat CACHE_TTL_MS (1 jam)
 // atau user klik tombol "Refresh Data" secara manual.
 // ============================================================
-const CACHE_TTL_MS = 60 * 1000;
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
 const cache = {
   perSheet: {},   // { MBB: { data: {...}, stats: {...}, ts: number } }
   summary: null,  // { statsAll: {...}, ts: number }
@@ -429,6 +461,7 @@ function renderTabs() {
 function switchTab(sheetOrSummary) {
   currentSheet = sheetOrSummary;
   activeFilters = {};
+  filterOptionsCache = {};
   searchInput.value = "";
   renderTabs();
   if (currentSheet === SUMMARY_KEY) {
@@ -537,7 +570,9 @@ function renderCharts(breakdown) {
 function buildQuery(refresh) {
   const params = new URLSearchParams();
   if (searchInput.value.trim()) params.set("search", searchInput.value.trim());
-  Object.entries(activeFilters).forEach(([col, val]) => params.set("filter_" + col, val));
+  Object.entries(activeFilters).forEach(([col, vals]) => {
+    if (vals && vals.length > 0) params.set("filter_" + col, vals.join(","));
+  });
   if (refresh) params.set("refresh", "1");
   return params.toString();
 }
@@ -606,64 +641,111 @@ function populateFilterColumnOptions(columns) {
   });
 }
 
+// Cache opsi unik per kolom (per sheet aktif) supaya tidak fetch ulang
+// /api/options tiap kali render ulang checkbox.
+let filterOptionsCache = {};
+
+// Tambah filter kolom baru: ambil semua nilai unik kolom itu, lalu
+// defaultnya SEMUA tercentang (supaya menambah filter tidak langsung
+// menyembunyikan semua data) — user lalu uncheck nilai yang tidak mau
+// ditampilkan.
 async function addFilter(column) {
   if (!column) return;
   try {
     const res = await fetch(`/api/options/${currentSheet}/${encodeURIComponent(column)}`);
     const json = await res.json();
-    const value = json.options[0] || "";
-    activeFilters[column] = value;
-    renderActiveFilters(json.options, column);
+    filterOptionsCache[column] = json.options;
+    activeFilters[column] = [...json.options]; // default: semua dicentang
+    renderActiveFilters();
     loadData();
   } catch (err) {
     console.error(err);
   }
 }
 
-function renderActiveFilters(optionsForNew, newCol) {
+function renderActiveFilters() {
   activeFiltersEl.innerHTML = "";
-  Object.keys(activeFilters).forEach(async (col) => {
-    const wrap = document.createElement("div");
-    wrap.className = "filter-chip";
+
+  Object.keys(activeFilters).forEach((col) => {
+    const options = filterOptionsCache[col] || [];
+    const selected = activeFilters[col] || [];
+
+    const group = document.createElement("div");
+    group.className = "filter-group";
+
+    const head = document.createElement("div");
+    head.className = "fg-head";
 
     const label = document.createElement("span");
-    label.textContent = col;
+    label.textContent = `${col} (${selected.length}/${options.length})`;
 
-    const sel = document.createElement("select");
-    sel.dataset.col = col;
+    const actions = document.createElement("div");
+    actions.className = "fg-actions";
 
-    let options = (col === newCol && optionsForNew) ? optionsForNew : null;
-    if (!options) {
-      const res = await fetch(`/api/options/${currentSheet}/${encodeURIComponent(col)}`);
-      const json = await res.json();
-      options = json.options;
-    }
-    options.forEach((o) => {
-      const opt = document.createElement("option");
-      opt.value = o;
-      opt.textContent = o;
-      if (o === activeFilters[col]) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    sel.onchange = () => {
-      activeFilters[col] = sel.value;
+    const selectAllBtn = document.createElement("button");
+    selectAllBtn.className = "fg-toggleall";
+    selectAllBtn.textContent = "Semua";
+    selectAllBtn.onclick = () => {
+      activeFilters[col] = [...options];
+      renderActiveFilters();
+      loadData();
+    };
+
+    const selectNoneBtn = document.createElement("button");
+    selectNoneBtn.className = "fg-toggleall";
+    selectNoneBtn.textContent = "Kosongkan";
+    selectNoneBtn.onclick = () => {
+      activeFilters[col] = [];
+      renderActiveFilters();
       loadData();
     };
 
     const removeBtn = document.createElement("button");
+    removeBtn.className = "fg-remove";
     removeBtn.textContent = "✕";
+    removeBtn.title = "Hapus filter ini";
     removeBtn.onclick = () => {
       delete activeFilters[col];
+      delete filterOptionsCache[col];
       renderActiveFilters();
       populateFilterColumnOptions(currentColumns);
       loadData();
     };
 
-    wrap.appendChild(label);
-    wrap.appendChild(sel);
-    wrap.appendChild(removeBtn);
-    activeFiltersEl.appendChild(wrap);
+    actions.appendChild(selectAllBtn);
+    actions.appendChild(selectNoneBtn);
+    actions.appendChild(removeBtn);
+    head.appendChild(label);
+    head.appendChild(actions);
+
+    const optionsWrap = document.createElement("div");
+    optionsWrap.className = "fg-options";
+
+    options.forEach((opt) => {
+      const lbl = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = selected.includes(opt);
+      cb.onchange = () => {
+        const set = new Set(activeFilters[col] || []);
+        if (cb.checked) set.add(opt);
+        else set.delete(opt);
+        activeFilters[col] = Array.from(set);
+        renderActiveFilters();
+        loadData();
+      };
+      const txt = document.createElement("span");
+      txt.textContent = opt;
+      lbl.appendChild(cb);
+      lbl.appendChild(txt);
+      optionsWrap.appendChild(lbl);
+    });
+
+    group.appendChild(head);
+    group.appendChild(optionsWrap);
+    activeFiltersEl.appendChild(group);
   });
+
   populateFilterColumnOptions(currentColumns);
 }
 
@@ -691,7 +773,7 @@ function escapeHtml(str) {
 // ============================================================
 // HALAMAN EXECUTIVE SUMMARY (Ringkasan)
 // Menampilkan ringkasan tiap sheet/project: total baris + breakdown status.
-// Juga pakai cache 60 detik supaya tidak fetch ulang tiap pindah tab.
+// Juga pakai cache 1 jam supaya tidak fetch ulang tiap pindah tab.
 // ============================================================
 async function loadSummary(forceRefresh = false) {
   if (!forceRefresh && cache.summary && isCacheFresh(cache.summary.ts)) {
@@ -711,36 +793,66 @@ async function loadSummary(forceRefresh = false) {
   }
 }
 
+// Ambil jumlah baris untuk 1 grup tertentu dari breakdown 1 sheet
+function getGroupCount(breakdown, groupName) {
+  const found = (breakdown || []).find((b) => b.status === groupName);
+  return found ? found.count : 0;
+}
+
 function renderSummary(statsAll, fromCache) {
-  // Kartu ringkasan keseluruhan (total semua project)
+  // Hitung per-sheet: testcom, drop, progress (sisa di luar testcom & drop)
+  const perSheetCalc = {};
   let grandTotal = 0;
-  let errorCount = 0;
+  let totalTestcom = 0;
+  let totalDrop = 0;
+  let totalProgress = 0;
+
   SHEETS.forEach((s) => {
     const d = statsAll[s];
-    if (!d) return;
-    if (d.error) errorCount++;
-    grandTotal += d.total || 0;
+    if (!d || d.error) {
+      perSheetCalc[s] = { total: 0, testcom: 0, drop: 0, progress: 0, error: d ? d.error : "Data tidak tersedia" };
+      return;
+    }
+    const testcom = getGroupCount(d.breakdown, "TESTCOM/GOLIVE");
+    const drop = getGroupCount(d.breakdown, "Kendala/DROP");
+    const progress = Math.max(0, d.total - testcom - drop);
+
+    perSheetCalc[s] = { total: d.total, testcom, drop, progress, error: null };
+
+    grandTotal += d.total;
+    totalTestcom += testcom;
+    totalDrop += drop;
+    totalProgress += progress;
   });
 
+  // ---- 5 kartu ringkasan keseluruhan ----
   summaryOverallEl.innerHTML = `
     <div class="item">
-      <div class="label">Total Project Dimonitor</div>
+      <div class="label">Total Project di Monitoring</div>
       <div class="val">${SHEETS.length}</div>
     </div>
     <div class="item">
-      <div class="label">Total Baris Data (Semua Project)</div>
+      <div class="label">Total LOP</div>
       <div class="val">${grandTotal}</div>
     </div>
     <div class="item">
-      <div class="label">Project Bermasalah / Error</div>
-      <div class="val" style="color:${errorCount > 0 ? 'var(--red)' : 'var(--green)'}">${errorCount}</div>
+      <div class="label">Project Testcom/Golive</div>
+      <div class="val" style="color:var(--green)">${totalTestcom}</div>
     </div>
     <div class="item">
-      <div class="label">Status Cache</div>
-      <div class="val" style="font-size:14px; color:var(--muted);">${fromCache ? "📦 Dari cache" : "🔄 Baru di-fetch"}</div>
+      <div class="label">Project Kendala/DROP</div>
+      <div class="val" style="color:var(--red)">${totalDrop}</div>
+    </div>
+    <div class="item">
+      <div class="label">Project Progress</div>
+      <div class="val" style="color:var(--accent)">${totalProgress}</div>
     </div>
   `;
 
+  // ---- Grafik perbandingan 5 project: Testcom vs Drop vs Progress ----
+  renderSummaryCompareChart(perSheetCalc);
+
+  // ---- Kartu detail per project (breakdown lengkap) ----
   summaryGridEl.innerHTML = "";
   SHEETS.forEach((sheetName) => {
     const d = statsAll[sheetName];
@@ -777,6 +889,41 @@ function renderSummary(statsAll, fromCache) {
   });
 }
 
+function renderSummaryCompareChart(perSheetCalc) {
+  if (typeof Chart === "undefined") return;
+
+  const labels = SHEETS;
+  const testcomData = SHEETS.map((s) => perSheetCalc[s].testcom);
+  const dropData = SHEETS.map((s) => perSheetCalc[s].drop);
+  const progressData = SHEETS.map((s) => perSheetCalc[s].progress);
+
+  if (summaryCompareChartInstance) summaryCompareChartInstance.destroy();
+
+  const ctx = document.getElementById("summaryCompareChart").getContext("2d");
+  summaryCompareChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "Testcom/Golive", data: testcomData, backgroundColor: "#16a34a", borderRadius: 6 },
+        { label: "Kendala/Drop", data: dropData, backgroundColor: "#dc2626", borderRadius: 6 },
+        { label: "Progress", data: progressData, backgroundColor: "#2563eb", borderRadius: 6 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "top", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11.5 } } },
+      },
+      scales: {
+        x: { ticks: { color: "#1e293b", font: { size: 12, weight: "700" } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
+      },
+    },
+  });
+}
+
 // ============================================================
 // EVENT HANDLERS
 // ============================================================
@@ -785,6 +932,7 @@ searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadData
 document.getElementById("clearBtn").onclick = () => {
   searchInput.value = "";
   activeFilters = {};
+  filterOptionsCache = {};
   renderActiveFilters();
   loadData();
 };
@@ -803,9 +951,9 @@ filterColumnSelect.onchange = () => {
 
 // ============================================================
 // INIT + AUTO REFRESH
-// Auto-refresh tiap 60 detik HANYA untuk tab/halaman yang sedang aktif
+// Auto-refresh tiap 1 JAM, HANYA untuk tab/halaman yang sedang aktif
 // dilihat user (bukan semua sheet sekaligus). Pindah tab antar halaman
-// lain TIDAK memicu fetch baru selama cache < 60 detik.
+// lain TIDAK memicu fetch baru selama cache masih < 1 jam.
 // ============================================================
 renderTabs();
 loadAll();

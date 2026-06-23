@@ -1,970 +1,678 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dashboard Monitoring Project</title>
-<script src="/vendor/chart.umd.js"></script>
-<style>
-  :root {
-    --bg: #f4f6fb;
-    --panel: #ffffff;
-    --panel-soft: #f8fafc;
-    --border: #e2e8f0;
-    --text: #1e293b;
-    --muted: #64748b;
-    --accent: #2563eb;
-    --accent-soft: #dbeafe;
-    --green: #16a34a;
-    --amber: #d97706;
-    --red: #dc2626;
-    --slate: #64748b;
-    --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-  }
+const express = require("express");
+const fetch = require("node-fetch");
+const { parse } = require("csv-parse/sync");
+const cors = require("cors");
+const path = require("path");
 
-  .brandbar {
-    background: #ffffff;
-    border-bottom: 1px solid var(--border);
-    padding: 14px 28px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-  .brandbar .logos {
-    display: flex;
-    align-items: center;
-    gap: 22px;
-    flex-wrap: wrap;
-  }
-  .brandbar .logos img {
-    height: 32px;
-    object-fit: contain;
-  }
-  .brandbar .divider {
-    width: 1px;
-    height: 28px;
-    background: var(--border);
-  }
+const app = express();
+app.use(cors());
+app.use(express.static(path.join(__dirname, "public")));
 
-  .pagehead {
-    padding: 20px 28px 4px;
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .pagehead h1 { margin: 0; font-size: 21px; font-weight: 700; }
-  .pagehead .sub { color: var(--muted); font-size: 13px; }
-
-  button {
-    padding: 9px 16px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: #ffffff;
-    color: var(--text);
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-  }
-  button:hover { background: var(--panel-soft); }
-  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  button.primary:hover { background: #1d4ed8; }
-
-  .tabs { display: flex; gap: 6px; padding: 16px 28px 0; flex-wrap: wrap; }
-  .tab {
-    padding: 10px 20px;
-    border-radius: 10px 10px 0 0;
-    background: var(--panel-soft);
-    color: var(--muted);
-    cursor: pointer;
-    border: 1px solid var(--border);
-    border-bottom: none;
-    font-size: 14px;
-    font-weight: 600;
-  }
-  .tab.active {
-    background: #fff;
-    color: var(--accent);
-    border-bottom: 2px solid #fff;
-    margin-bottom: -1px;
-  }
-
-  .content { padding: 0 28px 36px; }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 14px;
-    margin: 18px 0;
-  }
-  .stat-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px 20px;
-    box-shadow: var(--shadow);
-  }
-  .stat-card .label {
-    font-size: 12.5px;
-    color: var(--muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .stat-card .num { font-size: 34px; font-weight: 800; margin-top: 6px; line-height: 1; }
-  .stat-card .pct { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
-  .stat-card.total .num { color: var(--accent); }
-  .stat-card.c0 .num { color: var(--green); }
-  .stat-card.c1 .num { color: var(--amber); }
-  .stat-card.c2 .num { color: var(--red); }
-  .stat-card.c3 .num { color: var(--slate); }
-  .stat-card.c4 .num { color: #7c3aed; }
-
-  .charts-row {
-    display: grid;
-    grid-template-columns: 1.1fr 1fr;
-    gap: 16px;
-    margin: 18px 0;
-  }
-  @media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
-  .chart-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px;
-    box-shadow: var(--shadow);
-  }
-  .chart-card h3 { margin: 0 0 12px; font-size: 14px; font-weight: 700; color: var(--text); }
-  .chart-wrap { position: relative; height: 280px; }
-
-  .toolbar {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 14px 16px;
-    display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    align-items: center;
-    box-shadow: var(--shadow);
-  }
-  .toolbar input[type="text"] {
-    flex: 1;
-    min-width: 200px;
-    padding: 10px 14px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--panel-soft);
-    color: var(--text);
-    font-size: 14px;
-  }
-  select {
-    padding: 9px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--panel-soft);
-    color: var(--text);
-    font-size: 13px;
-    max-width: 180px;
-  }
-  .filters-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; width: 100%; }
-  .filter-group {
-    background: var(--accent-soft);
-    border-radius: 12px;
-    padding: 8px 12px;
-    min-width: 200px;
-    max-width: 280px;
-  }
-  .filter-group .fg-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 6px;
-  }
-  .filter-group .fg-head span { font-size: 12px; color: #1e40af; font-weight: 700; }
-  .filter-group .fg-head .fg-actions { display: flex; gap: 6px; align-items: center; }
-  .filter-group .fg-head button.fg-remove {
-    border: none; background: transparent; color: #1e40af; font-size: 13px; cursor: pointer; padding: 0 2px;
-  }
-  .filter-group .fg-toggleall {
-    border: none; background: transparent; color: #1e40af; font-size: 10.5px; text-decoration: underline; cursor: pointer; padding: 0;
-  }
-  .filter-group .fg-options {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    max-height: 160px;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-  .filter-group .fg-options label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12.5px;
-    color: var(--text);
-    cursor: pointer;
-  }
-  .filter-group .fg-options input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
-
-  .meta {
-    margin: 14px 0 10px;
-    color: var(--muted);
-    font-size: 13px;
-    display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .table-wrap {
-    overflow: auto;
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    max-height: 60vh;
-    background: var(--panel);
-    box-shadow: var(--shadow);
-  }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  thead th {
-    position: sticky;
-    top: 0;
-    background: var(--panel-soft);
-    color: var(--text);
-    text-align: left;
-    padding: 11px 14px;
-    border-bottom: 2px solid var(--border);
-    white-space: nowrap;
-    font-weight: 700;
-  }
-  tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  tbody tr:hover { background: #f8faff; }
-  .empty, .error, .loading { padding: 40px; text-align: center; color: var(--muted); }
-  .error { color: var(--red); }
-  .badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 20px;
-    background: var(--accent-soft);
-    font-size: 12px;
-    color: var(--accent);
-    font-weight: 700;
-    border: 1px solid #bfdbfe;
-  }
-  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 16px; }
-
-  .tab.summary-tab { border-color: var(--accent); }
-  .tab.summary-tab.active { color: var(--accent); }
-
-  .summary-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 16px;
-    margin: 18px 0;
-  }
-  .summary-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 20px 22px;
-    box-shadow: var(--shadow);
-  }
-  .summary-card h3 {
-    margin: 0 0 4px;
-    font-size: 16px;
-    font-weight: 800;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .summary-card .total-line {
-    font-size: 13px;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
-  .summary-card .total-line b { color: var(--accent); font-size: 15px; }
-  .summary-card .breakdown-list { list-style: none; margin: 0; padding: 0; }
-  .summary-card .breakdown-list li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--panel-soft);
-    font-size: 13px;
-  }
-  .summary-card .breakdown-list li:last-child { border-bottom: none; }
-  .summary-card .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-  .summary-card .breakdown-list .name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .summary-card .breakdown-list .cnt { font-weight: 700; color: var(--text); }
-  .summary-card .breakdown-list .pct { color: var(--muted); font-size: 11.5px; min-width: 42px; text-align: right; }
-  .summary-card .err { color: var(--red); font-size: 13px; }
-  .summary-overall {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 18px 20px;
-    box-shadow: var(--shadow);
-    margin-bottom: 18px;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
-  }
-  .summary-overall .item .label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
-  .summary-overall .item .val { font-size: 26px; font-weight: 800; color: var(--accent); margin-top: 4px; }
-  .cache-note { font-size: 11.5px; color: var(--muted); }
-</style>
-</head>
-<body>
-
-<div class="brandbar">
-  <div class="logos">
-    <img src="/logos/telkomakses.png" alt="Telkom Akses" />
-    <div class="divider"></div>
-    <img src="/logos/danantara.png" alt="Danantara Indonesia" />
-    <div class="divider"></div>
-    <img src="/logos/infranexia.png" alt="Infranexia" />
-  </div>
-  <div class="right">
-    <span style="font-size:12px;color:var(--muted)" id="lastUpdated"></span>
-  </div>
-</div>
-
-<div class="pagehead">
-  <div>
-    <h1>📊 Dashboard Monitoring Project</h1>
-    <div class="sub">Status pekerjaan real-time — MBB, OLO, HEM, FBB, PT2</div>
-  </div>
-  <button class="primary" id="refreshBtn">🔄 Refresh Data</button>
-</div>
-
-<div class="tabs" id="tabs"></div>
-
-<div class="content" id="summaryContent" style="display:none;">
-  <div class="summary-overall" id="summaryOverall"></div>
-  <div class="chart-card" style="margin-bottom:18px;">
-    <h3>Perbandingan 5 Project: Testcom/Golive vs Kendala/Drop vs Progress</h3>
-    <div class="chart-wrap" style="height:340px;"><canvas id="summaryCompareChart"></canvas></div>
-  </div>
-  <div class="summary-grid" id="summaryGrid"></div>
-</div>
-
-<div class="content" id="sheetContent">
-
-  <div class="stats-grid" id="statsGrid"></div>
-
-  <div class="charts-row">
-    <div class="chart-card">
-      <h3 id="chartTitleBar">Distribusi Status (Bar Chart)</h3>
-      <div class="chart-wrap"><canvas id="barChart"></canvas></div>
-    </div>
-    <div class="chart-card">
-      <h3 id="chartTitleDonut">Proporsi Status (Donut Chart)</h3>
-      <div class="chart-wrap"><canvas id="donutChart"></canvas></div>
-    </div>
-  </div>
-
-  <div class="toolbar">
-    <input type="text" id="searchInput" placeholder="Cari di semua kolom..." />
-    <select id="filterColumn">
-      <option value="">+ Tambah filter kolom...</option>
-    </select>
-    <button class="primary" id="searchBtn">Cari</button>
-    <button id="clearBtn">Bersihkan</button>
-    <div class="filters-row" id="activeFilters"></div>
-  </div>
-
-  <div class="meta">
-    <div id="metaInfo">Memuat data...</div>
-  </div>
-
-  <div class="table-wrap">
-    <div id="tableArea" class="loading">Memuat data...</div>
-  </div>
-</div>
-
-<footer>Dashboard Monitoring · Telkom Akses · Danantara Indonesia · Infranexia · Auto-refresh tiap 60 detik</footer>
-
-<script>
-const SHEETS = ["MBB", "OLO", "HEM", "FBB", "PT2"];
-const SUMMARY_KEY = "__SUMMARY__";
-
-let currentSheet = SHEETS[0]; // currentSheet can also be SUMMARY_KEY
-let activeFilters = {};
-let currentColumns = [];
-let barChartInstance = null;
-let donutChartInstance = null;
-let summaryCompareChartInstance = null;
-
-const tabsEl = document.getElementById("tabs");
-const searchInput = document.getElementById("searchInput");
-const filterColumnSelect = document.getElementById("filterColumn");
-const activeFiltersEl = document.getElementById("activeFilters");
-const tableArea = document.getElementById("tableArea");
-const metaInfo = document.getElementById("metaInfo");
-const lastUpdatedEl = document.getElementById("lastUpdated");
-const statsGrid = document.getElementById("statsGrid");
-const sheetContentEl = document.getElementById("sheetContent");
-const summaryContentEl = document.getElementById("summaryContent");
-const summaryGridEl = document.getElementById("summaryGrid");
-const summaryOverallEl = document.getElementById("summaryOverall");
-
-const PALETTE = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#64748b", "#db2777"];
-const CARD_CLASSES = ["c0", "c1", "c2", "c3", "c4"];
+const PORT = process.env.PORT || 3000;
 
 // ============================================================
-// CACHE LAYER (di sisi browser)
-// Tujuan: pindah tab TIDAK memanggil ulang API kalau data masih segar.
-// Data hanya benar2 di-refetch kalau sudah lewat CACHE_TTL_MS (1 jam)
-// atau user klik tombol "Refresh Data" secara manual.
+// KONFIGURASI
 // ============================================================
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
-const cache = {
-  perSheet: {},   // { MBB: { data: {...}, stats: {...}, ts: number } }
-  summary: null,  // { statsAll: {...}, ts: number }
+// ID Google Spreadsheet (dari URL)
+const SPREADSHEET_ID =
+  process.env.SHEET_ID || "1MqKFY3mn7-Qa2xn9kslKPKYCF15ONWPf71_dZuIF458";
+
+// Daftar sheet/tab yang dimonitor
+const SHEET_NAMES = ["MBB", "OLO", "HEM", "FBB", "PT2"];
+
+// Kolom status utama per sheet (untuk kartu angka besar & grafik)
+const STATUS_COLUMN = {
+  MBB: "Status Pekerjaan",
+  OLO: "STATUS PEKERJAAN",
+  FBB: "Status Fisik",
+  HEM: "PROGRESS JT LAST UPDATE",
+  PT2: "STATUS LOP",
 };
 
-function isCacheFresh(ts) {
-  return ts && (Date.now() - ts) < CACHE_TTL_MS;
-}
+// ============================================================
+// KOLOM STATUS BERDASARKAN POSISI (HURUF KOLOM) — sesuai konfirmasi user
+// Ini cara paling PASTI untuk ambil kolom status yang benar, karena tidak
+// bergantung sama sekali pada nama header (yang bisa duplikat/berubah-ubah).
+// Kalau di-set, ini akan dipakai LEBIH DULU sebelum fallback ke pencarian
+// berdasarkan nama (STATUS_COLUMN) di atas.
+// ============================================================
+const STATUS_COLUMN_LETTER = {
+  MBB: "U",   // Kolom U = Status Pekerjaan
+  OLO: "Q",   // Kolom Q = STATUS PEKERJAAN
+  FBB: "AH",  // Kolom AH = Status Fisik
+  PT2: "K",   // Kolom K = STATUS LOP
+  HEM: "AC",  // Kolom AC = PROGRESS JT LAST UPDATE
+};
 
-function renderTabs() {
-  tabsEl.innerHTML = "";
-
-  const summaryTab = document.createElement("div");
-  summaryTab.className = "tab summary-tab" + (currentSheet === SUMMARY_KEY ? " active" : "");
-  summaryTab.textContent = "📋 Ringkasan";
-  summaryTab.onclick = () => switchTab(SUMMARY_KEY);
-  tabsEl.appendChild(summaryTab);
-
-  SHEETS.forEach((s) => {
-    const div = document.createElement("div");
-    div.className = "tab" + (s === currentSheet ? " active" : "");
-    div.textContent = s;
-    div.onclick = () => switchTab(s);
-    tabsEl.appendChild(div);
-  });
-}
-
-function switchTab(sheetOrSummary) {
-  currentSheet = sheetOrSummary;
-  activeFilters = {};
-  filterOptionsCache = {};
-  searchInput.value = "";
-  renderTabs();
-  if (currentSheet === SUMMARY_KEY) {
-    sheetContentEl.style.display = "none";
-    summaryContentEl.style.display = "block";
-    loadSummary(); // pakai cache kalau masih segar
-  } else {
-    summaryContentEl.style.display = "none";
-    sheetContentEl.style.display = "block";
-    loadAll(); // pakai cache kalau masih segar
+// Konversi huruf kolom spreadsheet (A, B, ..., Z, AA, AB, ...) ke index
+// array berbasis 0. Contoh: "A" -> 0, "U" -> 20, "AC" -> 28, "AH" -> 33.
+function colLetterToIndex(letter) {
+  const clean = String(letter ?? "").trim().toUpperCase();
+  let n = 0;
+  for (const ch of clean) {
+    const code = ch.charCodeAt(0) - 64; // 'A' -> 1
+    if (code < 1 || code > 26) return -1; // huruf tidak valid
+    n = n * 26 + code;
   }
+  return n - 1; // ke index berbasis 0
 }
 
 // ============================================================
-// HALAMAN PER-SHEET (pakai cache)
+// GROUPING STATUS
+// Memetakan nilai status mentah (yang ada di tiap sheet) ke kategori
+// standar yang sama untuk semua project, supaya kartu & grafik bisa
+// dibandingkan apple-to-apple lintas sheet.
+// Urutan GROUP_ORDER menentukan urutan tampil di kartu/grafik (urutan
+// funnel proses, bukan urutan jumlah terbanyak).
 // ============================================================
-async function loadAll(forceRefresh = false) {
-  await Promise.all([loadStats(forceRefresh), loadData(forceRefresh)]);
+const GROUP_ORDER = [
+  "APPROVAL",
+  "SURVEY/PERIJINAN",
+  "PERSIAPAN",
+  "MATDEV",
+  "INSTALASI",
+  "FINISH INSTAL",
+  "TESTCOM/GOLIVE",
+  "Kendala/DROP",
+];
+
+const STATUS_GROUPS = {
+  "APPROVAL": {
+    FBB: [],
+    PT2: ["1.DESIGN", "2.APPROVAL"],
+    MBB: ["2. L0 DRM"],
+    OLO: ["01. Approval IHLD", "03. DRM", "13. HOLD"],
+    HEM: ["00. NEED APPROVAL", "02. REDESIGN", "17. HOLD"],
+  },
+  "SURVEY/PERIJINAN": {
+    FBB: ["01. PERIJINAN"],
+    PT2: [],
+    MBB: ["1. L0 Survey", "1.1 Done Survey", "3. L0 Progress Perizinan"],
+    OLO: ["02. Survey", "04. Perizinan"],
+    HEM: ["04. PERIZINAN"],
+  },
+  "PERSIAPAN": {
+    FBB: ["02. PERSIAPAN"],
+    PT2: [],
+    MBB: [],
+    OLO: [],
+    HEM: ["03. PERSIAPAN"],
+  },
+  "MATDEV": {
+    FBB: ["03. MATDEV"],
+    PT2: [],
+    MBB: ["4. L0 Material Delivery"],
+    OLO: ["05. Matdel"],
+    HEM: ["05. MATERIAL DELIVERY"],
+  },
+  "INSTALASI": {
+    FBB: ["04. INSTALASI"],
+    PT2: ["3.OGP DEPLOY"],
+    MBB: ["5.0 L0 Progress FO"],
+    OLO: ["06. Instalasi"],
+    HEM: ["06. OGP INSTALASI"],
+  },
+  "FINISH INSTAL": {
+    FBB: ["05. FINISH INSTALASI"],
+    PT2: ["4.FINISH INSTALL"],
+    MBB: ["6. L0 Ready", "7. L1 Ready"],
+    OLO: ["07. Finish Instalasi"],
+    HEM: ["07. FINISH INSTALASI"],
+  },
+  "TESTCOM/GOLIVE": {
+    FBB: ["06. GOLIVE", "07. UT", "08. PEMBERKASAN", "09. REKON", "10. BAST"],
+    PT2: ["5.GOLIVE"],
+    MBB: ["7. L3. OA Confirmation", "5.1 L0 Progress - Issue BTS"],
+    OLO: ["08. Golive", "15. OA (JT)", "16. OA (PT1)"],
+    HEM: ["09. UT", "10. GOLIVE", "11. REKON", "BAST"],
+  },
+  "Kendala/DROP": {
+    FBB: ["10.1 BAST 2025", "00. DROP"],
+    PT2: ["0.DROP", "0.KENDALA"],
+    MBB: [
+      "0. HOLD",
+      "0.1 Proposed Drop",
+      "0.2 L0 Drop",
+      "0.3 Drop MoM",
+      "0.1 Need Confirm by Tsel",
+      "0.2 Confirmed Batal by Tsel",
+    ],
+    OLO: ["00.1 Need Confirm", "10. UT", "00.2 Confirmed Batal", "01. Drop", "00. Plan Drop"],
+    HEM: ["19. READY PT1", "20. DROP", "18. PLAN DROP"],
+  },
+};
+
+// Normalisasi teks status untuk pencocokan ketat (case/spasi diabaikan)
+function normalizeStatusText(str) {
+  return String(str ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
 }
 
-async function loadStats(forceRefresh = false) {
-  try {
-    const cached = cache.perSheet[currentSheet];
-    let json;
-    if (!forceRefresh && cached && cached.stats && isCacheFresh(cached.statsTs)) {
-      json = cached.stats;
+// Normalisasi "longgar": buang semua spasi & titik, untuk menangani
+// perbedaan penulisan kecil seperti "3.OGP DEPLOY" vs "3. OGP DEPLOY"
+function normalizeStatusTextLoose(str) {
+  return normalizeStatusText(str).replace(/[\s.]+/g, "");
+}
+
+// Bangun lookup table sekali di awal: per sheet, dari nilai status mentah
+// (yang sudah dinormalisasi) -> nama grup
+function buildGroupLookups() {
+  const lookups = {};
+  SHEET_NAMES.forEach((sheet) => {
+    lookups[sheet] = { exact: new Map(), loose: new Map() };
+  });
+
+  Object.entries(STATUS_GROUPS).forEach(([groupName, perSheet]) => {
+    Object.entries(perSheet).forEach(([sheet, values]) => {
+      if (!lookups[sheet]) return;
+      values.forEach((v) => {
+        lookups[sheet].exact.set(normalizeStatusText(v), groupName);
+        lookups[sheet].loose.set(normalizeStatusTextLoose(v), groupName);
+      });
+    });
+  });
+
+  return lookups;
+}
+
+const GROUP_LOOKUPS = buildGroupLookups();
+const UNGROUPED_LABEL = "Lainnya / Belum Dipetakan";
+
+// Cari grup untuk satu nilai status mentah pada sheet tertentu.
+// Strategi: exact match (setelah normalisasi) -> loose match (tanpa
+// spasi/titik) -> kalau tidak ketemu sama sekali, masuk kategori
+// "Lainnya / Belum Dipetakan" (supaya kelihatan kalau ada nilai baru
+// di spreadsheet yang belum dimasukkan ke STATUS_GROUPS).
+function getStatusGroup(sheetName, rawValue) {
+  const raw = String(rawValue ?? "").trim();
+  if (!raw) return "(Kosong)";
+
+  const lookup = GROUP_LOOKUPS[sheetName];
+  if (!lookup) return UNGROUPED_LABEL;
+
+  const exactKey = normalizeStatusText(raw);
+  if (lookup.exact.has(exactKey)) return lookup.exact.get(exactKey);
+
+  const looseKey = normalizeStatusTextLoose(raw);
+  if (lookup.loose.has(looseKey)) return lookup.loose.get(looseKey);
+
+  return UNGROUPED_LABEL;
+}
+
+// Cache sederhana di memori supaya tidak terus-menerus menghantam Google
+const cache = {
+  data: {},     // { MBB: [...rows], OLO: [...rows], ... }
+  headers: {},  // { MBB: [...nama kolom berurutan sesuai posisi asli], ... }
+  lastFetch: {} // { MBB: timestamp, ... }
+};
+// Refresh setiap 1 jam — data di-cache di server selama ini, dan frontend
+// juga auto-reload mengikuti interval yang sama (lihat index.html).
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
+
+// ============================================================
+// FUNGSI AMBIL DATA DARI GOOGLE SHEETS (CSV export per-sheet)
+// ============================================================
+
+function normalizeKey(str) {
+  return String(str ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+// Cari header sebenarnya: baris pertama yang punya cukup banyak sel terisi
+// (mengatasi sheet yang punya baris judul/merge cell sebelum baris header asli)
+function detectHeaderRowIndex(rawRows) {
+  let bestIndex = 0;
+  let bestScore = -1;
+  const maxCols = rawRows.reduce((m, r) => Math.max(m, r.length), 0);
+
+  for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+    const row = rawRows[i];
+    const filled = row.filter((c) => String(c ?? "").trim() !== "").length;
+    // Skor: jumlah sel terisi, dengan syarat minimal isi > 1 sel dan bukan baris kosong total
+    if (filled >= 2 && filled > bestScore) {
+      bestScore = filled;
+      bestIndex = i;
+    }
+  }
+  return bestIndex;
+}
+
+async function fetchSheetCSV(sheetName) {
+  const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
+    sheetName
+  )}`;
+
+  const res = await fetch(url, { redirect: "follow" });
+  if (!res.ok) {
+    throw new Error(
+      `Gagal mengambil sheet "${sheetName}" (status ${res.status}). Pastikan spreadsheet sudah di-share "Anyone with the link can view".`
+    );
+  }
+  const csvText = await res.text();
+
+  // Kalau Google mengembalikan halaman HTML (login/akses ditolak), bukan CSV
+  if (csvText.trim().startsWith("<")) {
+    throw new Error(
+      `Sheet "${sheetName}" tidak bisa diakses publik. Pastikan link sharing diatur ke "Anyone with the link can view".`
+    );
+  }
+
+  // Parse mentah dulu (array of array) supaya bisa deteksi baris header asli
+  const rawRows = parse(csvText, {
+    skip_empty_lines: false,
+    relax_column_count: true,
+    trim: true,
+  });
+
+  if (rawRows.length === 0) return [];
+
+  const headerIdx = detectHeaderRowIndex(rawRows);
+  const headerRaw = rawRows[headerIdx];
+
+  // Bersihkan nama header: trim, isi nama default kalau kosong, dedup duplikat
+  const seen = {};
+  const headers = headerRaw.map((h, i) => {
+    let name = String(h ?? "").trim();
+    if (!name) name = `Kolom_${i + 1}`;
+    if (seen[name] !== undefined) {
+      seen[name]++;
+      name = `${name}_${seen[name]}`;
     } else {
-      const res = await fetch(`/api/stats/${currentSheet}`);
-      json = await res.json();
-      cache.perSheet[currentSheet] = cache.perSheet[currentSheet] || {};
-      cache.perSheet[currentSheet].stats = json;
-      cache.perSheet[currentSheet].statsTs = Date.now();
+      seen[name] = 0;
     }
+    return name;
+  });
 
-    document.getElementById("chartTitleBar").textContent = `Distribusi Grouping Status (Bar Chart)`;
-    document.getElementById("chartTitleDonut").textContent = `Proporsi Grouping Status (Donut Chart)`;
+  const dataRows = rawRows.slice(headerIdx + 1);
 
-    if (json.error) {
-      statsGrid.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ ${json.error}</div>`;
-      return;
-    }
-
-    statsGrid.innerHTML = "";
-    const totalCard = document.createElement("div");
-    totalCard.className = "stat-card total";
-    totalCard.innerHTML = `<div class="label">Total ${json.sheet}</div><div class="num">${json.total}</div><div class="pct">Seluruh baris data</div>`;
-    statsGrid.appendChild(totalCard);
-
-    json.breakdown.forEach((item, i) => {
-      const pct = json.total > 0 ? ((item.count / json.total) * 100).toFixed(1) : "0.0";
-      const card = document.createElement("div");
-      card.className = "stat-card " + (CARD_CLASSES[i % CARD_CLASSES.length]);
-      card.innerHTML = `<div class="label" title="${escapeHtml(item.status)}">${escapeHtml(item.status)}</div><div class="num">${item.count}</div><div class="pct">${pct}% dari total</div>`;
-      statsGrid.appendChild(card);
+  const records = dataRows
+    .filter((r) => r.some((c) => String(c ?? "").trim() !== "")) // skip baris benar2 kosong
+    .map((r) => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        obj[h] = r[i] !== undefined ? String(r[i]).trim() : "";
+      });
+      return obj;
     });
 
-    renderCharts(json.breakdown);
-  } catch (err) {
-    statsGrid.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ Gagal memuat statistik: ${err.message}</div>`;
-  }
+  return { records, headers };
 }
 
-function renderCharts(breakdown) {
-  if (typeof Chart === "undefined") {
-    document.getElementById("barChart").parentElement.innerHTML =
-      '<div class="error">⚠️ Library grafik gagal dimuat. Coba refresh halaman (Ctrl+Shift+R).</div>';
-    document.getElementById("donutChart").parentElement.innerHTML =
-      '<div class="error">⚠️ Library grafik gagal dimuat. Coba refresh halaman (Ctrl+Shift+R).</div>';
-    return;
-  }
+// Cari kandidat kolom yang cocok dengan nama target: gabungan exact match
+// (setelah normalisasi) DAN partial match (salah satu mengandung yang lain).
+// PENTING: kalau header ada duplikat (misal 2 kolom sama-sama bernama
+// "STATUS PEKERJAAN" di spreadsheet asli), parser akan rename yang kedua
+// jadi "STATUS PEKERJAAN_1". Itu TIDAK exact-match lagi, jadi harus tetap
+// ikut sebagai kandidat partial supaya tidak terlewat saat resolve kolom.
+function findCandidateColumns(keys, statusColName) {
+  const target = normalizeKey(statusColName);
 
-  const labels = breakdown.map((b) => b.status);
-  const data = breakdown.map((b) => b.count);
-  const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
+  const exactMatches = keys.filter((k) => normalizeKey(k) === target);
+  const partialMatches = keys.filter(
+    (k) =>
+      normalizeKey(k) !== target &&
+      (normalizeKey(k).includes(target) || target.includes(normalizeKey(k)))
+  );
 
-  if (barChartInstance) barChartInstance.destroy();
-  if (donutChartInstance) donutChartInstance.destroy();
-
-  const barCtx = document.getElementById("barChart").getContext("2d");
-  barChartInstance = new Chart(barCtx, {
-    type: "bar",
-    data: { labels, datasets: [{ label: "Jumlah", data, backgroundColor: colors, borderRadius: 6 }] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: "#1e293b", font: { size: 11 } }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
-      },
-    },
-  });
-
-  const donutCtx = document.getElementById("donutChart").getContext("2d");
-  donutChartInstance = new Chart(donutCtx, {
-    type: "doughnut",
-    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: "#ffffff" }] },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "right", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11 } } } },
-    },
-  });
+  const candidates = [...exactMatches, ...partialMatches];
+  const tier = exactMatches.length > 0 ? "exact+partial" : "partial-only";
+  return { candidates, exactMatches, partialMatches, tier };
 }
 
-function buildQuery(refresh) {
-  const params = new URLSearchParams();
-  if (searchInput.value.trim()) params.set("search", searchInput.value.trim());
-  Object.entries(activeFilters).forEach(([col, vals]) => {
-    if (vals && vals.length > 0) params.set("filter_" + col, vals.join(","));
-  });
-  if (refresh) params.set("refresh", "1");
-  return params.toString();
-}
-
-// loadData menerima parameter forceRefresh (klik tombol Refresh) ATAU
-// dipanggil ulang karena search/filter berubah (selalu fetch baru karena
-// kombinasi search/filter berbeda dengan yang di-cache).
-async function loadData(forceRefresh = false) {
-  const hasSearchOrFilter = !!searchInput.value.trim() || Object.keys(activeFilters).length > 0;
-  const cached = cache.perSheet[currentSheet];
-
-  // Hanya pakai cache kalau: tidak force refresh, tidak ada search/filter aktif,
-  // dan data cache masih segar (<60s).
-  if (!forceRefresh && !hasSearchOrFilter && cached && cached.data && isCacheFresh(cached.dataTs)) {
-    const json = cached.data;
-    currentColumns = json.columns;
-    populateFilterColumnOptions(json.columns);
-    renderActiveFilters();
-    renderTable(json.columns, json.rows);
-    metaInfo.innerHTML = `Menampilkan <span class="badge">${json.total}</span> baris pada sheet <b>${json.sheet}</b> <span class="cache-note">(dari cache)</span>`;
-    lastUpdatedEl.textContent = "Data terakhir: " + new Date(json.lastUpdated).toLocaleString("id-ID");
-    return;
+// Resolusi kolom status YANG BENAR.
+// Prioritas:
+// 1) Kalau STATUS_COLUMN_LETTER untuk sheet ini di-set, ambil kolom LANGSUNG
+//    berdasarkan posisi (huruf kolom) dari `headers` (array nama kolom
+//    berurutan sesuai posisi asli di spreadsheet). Ini cara paling pasti,
+//    tidak peduli nama header-nya apa/duplikat/berubah.
+// 2) Kalau tidak ada konfigurasi huruf (atau index di luar jangkauan),
+//    fallback ke pencarian berdasarkan nama (exact/partial + variasi nilai
+//    terbanyak) seperti sebelumnya.
+function resolveStatusColumn(sheetName, rows, statusColName, headers) {
+  // --- Prioritas 1: berdasarkan posisi huruf kolom ---
+  const letter = STATUS_COLUMN_LETTER[sheetName];
+  if (letter && headers && headers.length > 0) {
+    const idx = colLetterToIndex(letter);
+    if (idx >= 0 && idx < headers.length) {
+      return headers[idx];
+    }
   }
 
-  tableArea.innerHTML = '<div class="loading">Memuat data...</div>';
-  metaInfo.textContent = "Memuat...";
+  // --- Prioritas 2 (fallback): pencarian berdasarkan nama ---
+  if (!rows || rows.length === 0) return statusColName;
+  const keys = Object.keys(rows[0]);
+
+  const { candidates } = findCandidateColumns(keys, statusColName);
+  if (candidates.length === 0) return statusColName;
+  if (candidates.length === 1) return candidates[0];
+
+  // Ambil sample (maks 500 baris) supaya tetap cepat untuk sheet besar
+  const sample = rows.length > 500 ? rows.slice(0, 500) : rows;
+
+  let bestCol = candidates[0];
+  let bestScore = -1;
+  candidates.forEach((col) => {
+    const distinct = new Set();
+    sample.forEach((r) => {
+      const v = String(r[col] ?? "").trim();
+      if (v) distinct.add(v);
+    });
+    if (distinct.size > bestScore) {
+      bestScore = distinct.size;
+      bestCol = col;
+    }
+  });
+
+  return bestCol;
+}
+
+// Ambil nilai status dari 1 baris, berdasarkan nama kolom yang SUDAH
+// di-resolve sebelumnya (lihat resolveStatusColumn). Tidak melakukan
+// pencocokan ulang per baris supaya hasilnya konsisten untuk semua baris.
+function getStatusValue(row, resolvedColumnName) {
+  return row[resolvedColumnName];
+}
+
+async function getSheetData(sheetName, forceRefresh = false) {
+  const now = Date.now();
+  const isFresh =
+    cache.data[sheetName] &&
+    now - (cache.lastFetch[sheetName] || 0) < CACHE_TTL_MS;
+
+  if (isFresh && !forceRefresh) {
+    return cache.data[sheetName];
+  }
+
+  const { records, headers } = await fetchSheetCSV(sheetName);
+  cache.data[sheetName] = records;
+  cache.headers[sheetName] = headers;
+  cache.lastFetch[sheetName] = now;
+  return records;
+}
+
+// Ambil header asli (berurutan sesuai posisi kolom di spreadsheet) untuk
+// 1 sheet. Mengandalkan getSheetData supaya cache headers selalu konsisten
+// dengan cache rows (dipanggil setelah getSheetData supaya pasti sudah ada).
+async function getSheetHeaders(sheetName) {
+  if (!cache.headers[sheetName]) {
+    await getSheetData(sheetName);
+  }
+  return cache.headers[sheetName] || [];
+}
+
+// Hitung breakdown status untuk satu sheet, dalam 2 bentuk:
+// - breakdown      : sudah dikelompokkan ke 8 kategori standar (GROUP_ORDER),
+//                     diurutkan sesuai urutan funnel proses (bukan jumlah terbanyak)
+// - rawBreakdown    : nilai status mentah asli dari spreadsheet (untuk debug)
+// - unmatchedValues : nilai mentah yang TIDAK ketemu mapping-nya di STATUS_GROUPS
+//                     (kalau ada, berarti ada nilai baru di sheet yang perlu
+//                     ditambahkan ke mapping)
+async function computeStatusBreakdown(sheetName, rows, statusCol) {
+  const headers = await getSheetHeaders(sheetName);
+  const resolvedCol = resolveStatusColumn(sheetName, rows, statusCol, headers);
+
+  const groupCounts = {};
+  const rawCounts = {};
+  const unmatched = {};
+  let withStatus = 0;
+
+  rows.forEach((row) => {
+    let val = String(getStatusValue(row, resolvedCol) ?? "").trim();
+    if (!val) val = "(Kosong)";
+    else withStatus++;
+
+    rawCounts[val] = (rawCounts[val] || 0) + 1;
+
+    const group = getStatusGroup(sheetName, val);
+    groupCounts[group] = (groupCounts[group] || 0) + 1;
+
+    if (group === UNGROUPED_LABEL && val !== "(Kosong)") {
+      unmatched[val] = (unmatched[val] || 0) + 1;
+    }
+  });
+
+  // Urutkan breakdown grup sesuai GROUP_ORDER, lalu "(Kosong)", lalu "Lainnya"
+  const orderedGroupNames = [...GROUP_ORDER, "(Kosong)", UNGROUPED_LABEL];
+  const breakdown = orderedGroupNames
+    .filter((g) => groupCounts[g] !== undefined)
+    .map((g) => ({ status: g, count: groupCounts[g] }));
+
+  const rawBreakdown = Object.entries(rawCounts)
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const unmatchedValues = Object.entries(unmatched)
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+
+  return { breakdown, rawBreakdown, unmatchedValues, withStatus, resolvedColumn: resolvedCol };
+}
+
+// ============================================================
+// API ROUTES
+// ============================================================
+
+// Daftar sheet yang tersedia
+app.get("/api/sheets", (req, res) => {
+  res.json({ sheets: SHEET_NAMES });
+});
+
+// Ambil data 1 sheet, dengan optional search & filter
+// /api/data/MBB?search=jakarta&kolom=Status&nilai=Active
+app.get("/api/data/:sheet", async (req, res) => {
+  const sheetName = req.params.sheet.toUpperCase();
+  if (!SHEET_NAMES.includes(sheetName)) {
+    return res.status(404).json({ error: `Sheet "${sheetName}" tidak dikenal.` });
+  }
+
+  const refresh = req.query.refresh === "1";
+
   try {
-    const qs = buildQuery(forceRefresh);
-    const res = await fetch(`/api/data/${currentSheet}?${qs}`);
-    const json = await res.json();
+    let rows = await getSheetData(sheetName, refresh);
 
-    if (json.error) {
-      tableArea.innerHTML = `<div class="error">⚠️ ${json.error}</div>`;
-      metaInfo.textContent = "Gagal memuat data";
-      return;
+    // Free-text search di semua kolom
+    const search = (req.query.search || "").trim().toLowerCase();
+    if (search) {
+      rows = rows.filter((row) =>
+        Object.values(row).some((val) =>
+          String(val ?? "").toLowerCase().includes(search)
+        )
+      );
     }
 
-    // Simpan ke cache hanya kalau tidak ada search/filter aktif
-    // (supaya cache selalu berisi data "polos" per sheet)
-    if (!hasSearchOrFilter) {
-      cache.perSheet[currentSheet] = cache.perSheet[currentSheet] || {};
-      cache.perSheet[currentSheet].data = json;
-      cache.perSheet[currentSheet].dataTs = Date.now();
-    }
+    // Filter per kolom (checkbox, bisa pilih lebih dari 1 nilai sekaligus):
+    // filter_<NamaKolom>=nilai1,nilai2,nilai3 -> baris cocok kalau nilainya
+    // ADA SALAH SATU dari nilai yang dipilih (logika OR antar nilai dalam 1
+    // kolom). Beberapa kolom berbeda tetap digabung dengan AND.
+    Object.keys(req.query).forEach((key) => {
+      if (key.startsWith("filter_")) {
+        const col = key.replace("filter_", "");
+        const rawVal = String(req.query[key] || "").trim();
+        if (!rawVal) return;
+        const selectedValues = rawVal
+          .split(",")
+          .map((v) => v.trim())
+          .filter((v) => v !== "");
+        if (selectedValues.length === 0) return;
 
-    currentColumns = json.columns;
-    populateFilterColumnOptions(json.columns);
-    renderActiveFilters();
-    renderTable(json.columns, json.rows);
+        rows = rows.filter((row) =>
+          selectedValues.includes(String(row[col] ?? "").trim())
+        );
+      }
+    });
 
-    metaInfo.innerHTML = `Menampilkan <span class="badge">${json.total}</span> baris pada sheet <b>${json.sheet}</b>`;
-    lastUpdatedEl.textContent = "Data terakhir: " + new Date(json.lastUpdated).toLocaleString("id-ID");
-  } catch (err) {
-    tableArea.innerHTML = `<div class="error">⚠️ Gagal memuat data: ${err.message}</div>`;
-  }
-}
+    const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
 
-function populateFilterColumnOptions(columns) {
-  filterColumnSelect.innerHTML = '<option value="">+ Tambah filter kolom...</option>';
-  columns.forEach((c) => {
-    if (activeFilters[c] !== undefined) return;
-    const opt = document.createElement("option");
-    opt.value = c;
-    opt.textContent = c;
-    filterColumnSelect.appendChild(opt);
-  });
-}
-
-// Cache opsi unik per kolom (per sheet aktif) supaya tidak fetch ulang
-// /api/options tiap kali render ulang checkbox.
-let filterOptionsCache = {};
-
-// Tambah filter kolom baru: ambil semua nilai unik kolom itu, lalu
-// defaultnya SEMUA tercentang (supaya menambah filter tidak langsung
-// menyembunyikan semua data) — user lalu uncheck nilai yang tidak mau
-// ditampilkan.
-async function addFilter(column) {
-  if (!column) return;
-  try {
-    const res = await fetch(`/api/options/${currentSheet}/${encodeURIComponent(column)}`);
-    const json = await res.json();
-    filterOptionsCache[column] = json.options;
-    activeFilters[column] = [...json.options]; // default: semua dicentang
-    renderActiveFilters();
-    loadData();
+    res.json({
+      sheet: sheetName,
+      total: rows.length,
+      columns,
+      rows,
+      lastUpdated: new Date(cache.lastFetch[sheetName] || Date.now()).toISOString(),
+    });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: err.message });
   }
-}
+});
 
-function renderActiveFilters() {
-  activeFiltersEl.innerHTML = "";
-
-  Object.keys(activeFilters).forEach((col) => {
-    const options = filterOptionsCache[col] || [];
-    const selected = activeFilters[col] || [];
-
-    const group = document.createElement("div");
-    group.className = "filter-group";
-
-    const head = document.createElement("div");
-    head.className = "fg-head";
-
-    const label = document.createElement("span");
-    label.textContent = `${col} (${selected.length}/${options.length})`;
-
-    const actions = document.createElement("div");
-    actions.className = "fg-actions";
-
-    const selectAllBtn = document.createElement("button");
-    selectAllBtn.className = "fg-toggleall";
-    selectAllBtn.textContent = "Semua";
-    selectAllBtn.onclick = () => {
-      activeFilters[col] = [...options];
-      renderActiveFilters();
-      loadData();
-    };
-
-    const selectNoneBtn = document.createElement("button");
-    selectNoneBtn.className = "fg-toggleall";
-    selectNoneBtn.textContent = "Kosongkan";
-    selectNoneBtn.onclick = () => {
-      activeFilters[col] = [];
-      renderActiveFilters();
-      loadData();
-    };
-
-    const removeBtn = document.createElement("button");
-    removeBtn.className = "fg-remove";
-    removeBtn.textContent = "✕";
-    removeBtn.title = "Hapus filter ini";
-    removeBtn.onclick = () => {
-      delete activeFilters[col];
-      delete filterOptionsCache[col];
-      renderActiveFilters();
-      populateFilterColumnOptions(currentColumns);
-      loadData();
-    };
-
-    actions.appendChild(selectAllBtn);
-    actions.appendChild(selectNoneBtn);
-    actions.appendChild(removeBtn);
-    head.appendChild(label);
-    head.appendChild(actions);
-
-    const optionsWrap = document.createElement("div");
-    optionsWrap.className = "fg-options";
-
-    options.forEach((opt) => {
-      const lbl = document.createElement("label");
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = selected.includes(opt);
-      cb.onchange = () => {
-        const set = new Set(activeFilters[col] || []);
-        if (cb.checked) set.add(opt);
-        else set.delete(opt);
-        activeFilters[col] = Array.from(set);
-        renderActiveFilters();
-        loadData();
-      };
-      const txt = document.createElement("span");
-      txt.textContent = opt;
-      lbl.appendChild(cb);
-      lbl.appendChild(txt);
-      optionsWrap.appendChild(lbl);
-    });
-
-    group.appendChild(head);
-    group.appendChild(optionsWrap);
-    activeFiltersEl.appendChild(group);
-  });
-
-  populateFilterColumnOptions(currentColumns);
-}
-
-function renderTable(columns, rows) {
-  if (!rows || rows.length === 0) {
-    tableArea.innerHTML = '<div class="empty">Tidak ada data yang cocok.</div>';
-    return;
+// Ambil opsi unik untuk sebuah kolom (buat populate dropdown filter)
+app.get("/api/options/:sheet/:column", async (req, res) => {
+  const sheetName = req.params.sheet.toUpperCase();
+  const column = req.params.column;
+  if (!SHEET_NAMES.includes(sheetName)) {
+    return res.status(404).json({ error: `Sheet "${sheetName}" tidak dikenal.` });
   }
-  let html = "<table><thead><tr>";
-  columns.forEach((c) => (html += `<th>${escapeHtml(c)}</th>`));
-  html += "</tr></thead><tbody>";
-  rows.forEach((row) => {
-    html += "<tr>";
-    columns.forEach((c) => { html += `<td>${escapeHtml(row[c] ?? "")}</td>`; });
-    html += "</tr>";
-  });
-  html += "</tbody></table>";
-  tableArea.innerHTML = html;
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-// ============================================================
-// HALAMAN EXECUTIVE SUMMARY (Ringkasan)
-// Menampilkan ringkasan tiap sheet/project: total baris + breakdown status.
-// Juga pakai cache 60 detik supaya tidak fetch ulang tiap pindah tab.
-// ============================================================
-async function loadSummary(forceRefresh = false) {
-  if (!forceRefresh && cache.summary && isCacheFresh(cache.summary.ts)) {
-    renderSummary(cache.summary.statsAll, true);
-    return;
-  }
-
-  summaryGridEl.innerHTML = '<div class="loading" style="grid-column:1/-1">Memuat ringkasan...</div>';
-  summaryOverallEl.innerHTML = "";
   try {
-    const res = await fetch("/api/stats-all");
-    const statsAll = await res.json();
-    cache.summary = { statsAll, ts: Date.now() };
-    renderSummary(statsAll, false);
+    const rows = await getSheetData(sheetName);
+    const values = new Set();
+    rows.forEach((r) => {
+      const v = String(r[column] ?? "").trim();
+      if (v) values.add(v);
+    });
+    res.json({ column, options: Array.from(values).sort() });
   } catch (err) {
-    summaryGridEl.innerHTML = `<div class="error" style="grid-column:1/-1">⚠️ Gagal memuat ringkasan: ${err.message}</div>`;
+    res.status(500).json({ error: err.message });
   }
-}
+});
 
-// Ambil jumlah baris untuk 1 grup tertentu dari breakdown 1 sheet
-function getGroupCount(breakdown, groupName) {
-  const found = (breakdown || []).find((b) => b.status === groupName);
-  return found ? found.count : 0;
-}
-
-function renderSummary(statsAll, fromCache) {
-  // Hitung per-sheet: testcom, drop, progress (sisa di luar testcom & drop)
-  const perSheetCalc = {};
-  let grandTotal = 0;
-  let totalTestcom = 0;
-  let totalDrop = 0;
-  let totalProgress = 0;
-
-  SHEETS.forEach((s) => {
-    const d = statsAll[s];
-    if (!d || d.error) {
-      perSheetCalc[s] = { total: 0, testcom: 0, drop: 0, progress: 0, error: d ? d.error : "Data tidak tersedia" };
-      return;
+// Rangkuman semua sheet sekaligus (untuk halaman overview)
+app.get("/api/summary", async (req, res) => {
+  try {
+    const summary = {};
+    for (const name of SHEET_NAMES) {
+      try {
+        const rows = await getSheetData(name);
+        summary[name] = { total: rows.length, error: null };
+      } catch (err) {
+        summary[name] = { total: 0, error: err.message };
+      }
     }
-    const testcom = getGroupCount(d.breakdown, "TESTCOM/GOLIVE");
-    const drop = getGroupCount(d.breakdown, "Kendala/DROP");
-    const progress = Math.max(0, d.total - testcom - drop);
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
-    perSheetCalc[s] = { total: d.total, testcom, drop, progress, error: null };
+// Statistik status (untuk kartu angka besar + grafik) - satu sheet
+app.get("/api/stats/:sheet", async (req, res) => {
+  const sheetName = req.params.sheet.toUpperCase();
+  if (!SHEET_NAMES.includes(sheetName)) {
+    return res.status(404).json({ error: `Sheet "${sheetName}" tidak dikenal.` });
+  }
+  try {
+    const rows = await getSheetData(sheetName);
+    const statusCol = STATUS_COLUMN[sheetName];
+    const { breakdown, rawBreakdown, unmatchedValues, withStatus, resolvedColumn } =
+      await computeStatusBreakdown(sheetName, rows, statusCol);
 
-    grandTotal += d.total;
-    totalTestcom += testcom;
-    totalDrop += drop;
-    totalProgress += progress;
-  });
+    res.json({
+      sheet: sheetName,
+      statusColumn: statusCol,
+      resolvedColumn,
+      total: rows.length,
+      withStatus,
+      breakdown,        // sudah dikelompokkan (dipakai kartu & grafik)
+      rawBreakdown,      // nilai mentah asli (untuk debug/detail)
+      unmatchedValues,   // nilai mentah yang belum ada mapping grup-nya
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message, sheet: sheetName, statusColumn: STATUS_COLUMN[sheetName] });
+  }
+});
 
-  // ---- 5 kartu ringkasan keseluruhan ----
-  summaryOverallEl.innerHTML = `
-    <div class="item">
-      <div class="label">Total Project di Monitoring</div>
-      <div class="val">${SHEETS.length}</div>
-    </div>
-    <div class="item">
-      <div class="label">Total LOP</div>
-      <div class="val">${grandTotal}</div>
-    </div>
-    <div class="item">
-      <div class="label">Project Testcom/Golive</div>
-      <div class="val" style="color:var(--green)">${totalTestcom}</div>
-    </div>
-    <div class="item">
-      <div class="label">Project Kendala/DROP</div>
-      <div class="val" style="color:var(--red)">${totalDrop}</div>
-    </div>
-    <div class="item">
-      <div class="label">Project Progress</div>
-      <div class="val" style="color:var(--accent)">${totalProgress}</div>
-    </div>
-  `;
+// Statistik semua sheet sekaligus (untuk halaman overview)
+app.get("/api/stats-all", async (req, res) => {
+  const result = {};
+  for (const sheetName of SHEET_NAMES) {
+    const statusCol = STATUS_COLUMN[sheetName];
+    try {
+      const rows = await getSheetData(sheetName);
+      const { breakdown, rawBreakdown, unmatchedValues, withStatus } =
+        await computeStatusBreakdown(sheetName, rows, statusCol);
 
-  // ---- Grafik perbandingan 5 project: Testcom vs Drop vs Progress ----
-  renderSummaryCompareChart(perSheetCalc);
-
-  // ---- Kartu detail per project (breakdown lengkap) ----
-  summaryGridEl.innerHTML = "";
-  SHEETS.forEach((sheetName) => {
-    const d = statsAll[sheetName];
-    const card = document.createElement("div");
-    card.className = "summary-card";
-
-    if (!d || d.error) {
-      card.innerHTML = `
-        <h3>${sheetName}</h3>
-        <div class="err">⚠️ ${d ? escapeHtml(d.error) : "Data tidak tersedia"}</div>
-      `;
-      summaryGridEl.appendChild(card);
-      return;
+      result[sheetName] = {
+        statusColumn: statusCol,
+        total: rows.length,
+        withStatus,
+        breakdown,
+        rawBreakdown,
+        unmatchedValues,
+        error: null,
+      };
+    } catch (err) {
+      result[sheetName] = {
+        statusColumn: statusCol,
+        total: 0,
+        withStatus: 0,
+        breakdown: [],
+        rawBreakdown: [],
+        unmatchedValues: [],
+        error: err.message,
+      };
     }
-
-    const topItems = d.breakdown;
-    const itemsHtml = topItems.map((item, i) => {
-      const pct = d.total > 0 ? ((item.count / d.total) * 100).toFixed(1) : "0.0";
-      const color = PALETTE[i % PALETTE.length];
-      return `<li>
-        <span class="dot" style="background:${color}"></span>
-        <span class="name" title="${escapeHtml(item.status)}">${escapeHtml(item.status)}</span>
-        <span class="cnt">${item.count}</span>
-        <span class="pct">${pct}%</span>
-      </li>`;
-    }).join("");
-
-    card.innerHTML = `
-      <h3>${sheetName} <span class="badge">${d.total}</span></h3>
-      <div class="total-line">Kolom status: <b>${escapeHtml(d.statusColumn)}</b> · ${d.withStatus} dari ${d.total} baris terisi</div>
-      <ul class="breakdown-list">${itemsHtml || '<li class="name">Tidak ada data</li>'}</ul>
-    `;
-    summaryGridEl.appendChild(card);
-  });
-}
-
-function renderSummaryCompareChart(perSheetCalc) {
-  if (typeof Chart === "undefined") return;
-
-  const labels = SHEETS;
-  const testcomData = SHEETS.map((s) => perSheetCalc[s].testcom);
-  const dropData = SHEETS.map((s) => perSheetCalc[s].drop);
-  const progressData = SHEETS.map((s) => perSheetCalc[s].progress);
-
-  if (summaryCompareChartInstance) summaryCompareChartInstance.destroy();
-
-  const ctx = document.getElementById("summaryCompareChart").getContext("2d");
-  summaryCompareChartInstance = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        { label: "Testcom/Golive", data: testcomData, backgroundColor: "#16a34a", borderRadius: 6 },
-        { label: "Kendala/Drop", data: dropData, backgroundColor: "#dc2626", borderRadius: 6 },
-        { label: "Progress", data: progressData, backgroundColor: "#2563eb", borderRadius: 6 },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: "top", labels: { color: "#1e293b", boxWidth: 12, font: { size: 11.5 } } },
-      },
-      scales: {
-        x: { ticks: { color: "#1e293b", font: { size: 12, weight: "700" } }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { color: "#64748b" }, grid: { color: "#eef2f7" } },
-      },
-    },
-  });
-}
-
-// ============================================================
-// EVENT HANDLERS
-// ============================================================
-document.getElementById("searchBtn").onclick = () => loadData();
-searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loadData(); });
-document.getElementById("clearBtn").onclick = () => {
-  searchInput.value = "";
-  activeFilters = {};
-  filterOptionsCache = {};
-  renderActiveFilters();
-  loadData();
-};
-document.getElementById("refreshBtn").onclick = () => {
-  if (currentSheet === SUMMARY_KEY) {
-    loadSummary(true);
-  } else {
-    loadAll(true);
   }
-};
-filterColumnSelect.onchange = () => {
-  const col = filterColumnSelect.value;
-  filterColumnSelect.value = "";
-  if (col) addFilter(col);
-};
+  res.json(result);
+});
 
-// ============================================================
-// INIT + AUTO REFRESH
-// Auto-refresh tiap 60 detik HANYA untuk tab/halaman yang sedang aktif
-// dilihat user (bukan semua sheet sekaligus). Pindah tab antar halaman
-// lain TIDAK memicu fetch baru selama cache < 60 detik.
-// ============================================================
-renderTabs();
-loadAll();
-
-setInterval(() => {
-  if (currentSheet === SUMMARY_KEY) {
-    loadSummary(true);
-  } else {
-    loadAll(true);
+// Debug: lihat nilai status mentah yang BELUM ketemu mapping grup-nya,
+// untuk semua sheet sekaligus. Berguna kalau ada penambahan/typo status baru
+// di spreadsheet supaya bisa ditambahkan ke STATUS_GROUPS di server.js.
+app.get("/api/group-debug", async (req, res) => {
+  const result = {};
+  for (const sheetName of SHEET_NAMES) {
+    try {
+      const rows = await getSheetData(sheetName);
+      const statusCol = STATUS_COLUMN[sheetName];
+      const { unmatchedValues } = await computeStatusBreakdown(sheetName, rows, statusCol);
+      result[sheetName] = unmatchedValues;
+    } catch (err) {
+      result[sheetName] = { error: err.message };
+    }
   }
-}, CACHE_TTL_MS);
-</script>
-</body>
-</html>
+  res.json(result);
+});
+
+// Debug: cek header asli, jumlah baris, dan beberapa sample data
+app.get("/api/debug/:sheet", async (req, res) => {
+  const sheetName = req.params.sheet.toUpperCase();
+  if (!SHEET_NAMES.includes(sheetName)) {
+    return res.status(404).json({ error: `Sheet "${sheetName}" tidak dikenal.` });
+  }
+  try {
+    const rows = await getSheetData(sheetName, true); // selalu fresh
+    const headers = await getSheetHeaders(sheetName);
+    const statusCol = STATUS_COLUMN[sheetName];
+    const letter = STATUS_COLUMN_LETTER[sheetName];
+    const letterIdx = letter ? colLetterToIndex(letter) : -1;
+    const resolvedCol = resolveStatusColumn(sheetName, rows, statusCol, headers);
+    const keys = rows.length > 0 ? Object.keys(rows[0]) : [];
+    const { candidates, tier } = findCandidateColumns(keys, statusCol);
+
+    res.json({
+      sheet: sheetName,
+      totalRowsFetched: rows.length,
+      columnsDetected: headers,
+      statusColumnExpected: statusCol,
+      statusColumnLetter: letter || null,
+      statusColumnLetterIndex: letterIdx,
+      headerAtThatLetter: letterIdx >= 0 && letterIdx < headers.length ? headers[letterIdx] : null,
+      statusColumnResolved: resolvedCol,
+      candidateColumnsByName: candidates, // kandidat kalau resolve by-name dipakai (fallback)
+      matchTier: tier,
+      sampleRows: rows.slice(0, 5),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/health", (req, res) => res.json({ status: "ok" }));
+
+app.listen(PORT, () => {
+  console.log(`Server berjalan di port ${PORT}`);
+});
