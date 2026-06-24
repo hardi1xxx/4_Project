@@ -283,21 +283,29 @@ function normalizeKey(str) {
 function detectHeaderRowIndex(rawRows, expectedColumnName, expectedLetterIndex) {
   const scanLimit = Math.min(rawRows.length, 30);
   const target = expectedColumnName ? normalizeKey(expectedColumnName) : "";
+  const targetLoose = expectedColumnName ? normalizeStatusTextLoose(expectedColumnName) : "";
 
   // --- Lapis 1: cek persis di posisi kolom yang sudah dikonfirmasi ---
   if (target && typeof expectedLetterIndex === "number" && expectedLetterIndex >= 0) {
     for (let i = 0; i < scanLimit; i++) {
       const cellAtLetter = rawRows[i][expectedLetterIndex];
-      if (normalizeKey(cellAtLetter) === target) return i;
+      if (
+        normalizeKey(cellAtLetter) === target ||
+        normalizeStatusTextLoose(cellAtLetter) === targetLoose
+      )
+        return i;
     }
   }
 
-  // --- Lapis 2: exact match di sembarang sel pada baris (fallback) ---
+  // --- Lapis 2: exact/loose match di sembarang sel pada baris (fallback) ---
   if (target) {
     for (let i = 0; i < scanLimit; i++) {
       const row = rawRows[i];
       const hasExactMatch = row.some((c) => normalizeKey(c) === target);
-      if (hasExactMatch) return i;
+      const hasLooseMatch = row.some(
+        (c) => normalizeStatusTextLoose(c) === targetLoose
+      );
+      if (hasExactMatch || hasLooseMatch) return i;
     }
   }
 
@@ -378,43 +386,63 @@ async function fetchSheetCSV(sheetName) {
   return { records, headers, headerIdx, totalRawRows: rawRows.length };
 }
 
-// Cari kandidat kolom yang cocok dengan nama target: gabungan exact match
-// (setelah normalisasi) DAN partial match (salah satu mengandung yang lain).
-// PENTING: kalau header ada duplikat (misal 2 kolom sama-sama bernama
-// "STATUS PEKERJAAN" di spreadsheet asli), parser akan rename yang kedua
-// jadi "STATUS PEKERJAAN_1". Itu TIDAK exact-match lagi, jadi harus tetap
-// ikut sebagai kandidat partial supaya tidak terlewat saat resolve kolom.
+// Cari kandidat kolom yang cocok dengan nama target: gabungan exact match,
+// loose match, dan partial match. Ini membantu jika nama header di sheet
+// berubah tipis atau ada duplikat yang diberi suffix seperti "_1".
 function findCandidateColumns(keys, statusColName) {
   const target = normalizeKey(statusColName);
+  const targetLoose = normalizeStatusTextLoose(statusColName);
 
   const exactMatches = keys.filter((k) => normalizeKey(k) === target);
-  const partialMatches = keys.filter(
+  const looseMatches = keys.filter(
     (k) =>
-      normalizeKey(k) !== target &&
-      (normalizeKey(k).includes(target) || target.includes(normalizeKey(k)))
+      normalizeStatusTextLoose(k) === targetLoose &&
+      normalizeKey(k) !== target
   );
+  const partialMatches = keys.filter((k) => {
+    const normalized = normalizeKey(k);
+    return (
+      normalized !== target &&
+      !looseMatches.includes(k) &&
+      (normalized.includes(target) || target.includes(normalized) ||
+        normalizeStatusTextLoose(k).includes(targetLoose) ||
+        targetLoose.includes(normalizeStatusTextLoose(k)))
+    );
+  });
 
-  const candidates = [...exactMatches, ...partialMatches];
-  const tier = exactMatches.length > 0 ? "exact+partial" : "partial-only";
-  return { candidates, exactMatches, partialMatches, tier };
+  const candidates = [...exactMatches, ...looseMatches, ...partialMatches];
+  const tier = exactMatches.length > 0 ? "exact+partial" : looseMatches.length > 0 ? "loose+partial" : "partial-only";
+  return { candidates, exactMatches, looseMatches, partialMatches, tier };
+}
+
+function headerLooksLikeExpected(header, expectedColumnName) {
+  if (!header || !expectedColumnName) return false;
+  const normalizedHeader = normalizeStatusTextLoose(header);
+  const normalizedExpected = normalizeStatusTextLoose(expectedColumnName);
+  return (
+    normalizedHeader === normalizedExpected ||
+    normalizedHeader.includes(normalizedExpected) ||
+    normalizedExpected.includes(normalizedHeader)
+  );
 }
 
 // Resolusi kolom status YANG BENAR.
 // Prioritas:
 // 1) Kalau STATUS_COLUMN_LETTER untuk sheet ini di-set, ambil kolom LANGSUNG
 //    berdasarkan posisi (huruf kolom) dari `headers` (array nama kolom
-//    berurutan sesuai posisi asli di spreadsheet). Ini cara paling pasti,
-//    tidak peduli nama header-nya apa/duplikat/berubah.
-// 2) Kalau tidak ada konfigurasi huruf (atau index di luar jangkauan),
-//    fallback ke pencarian berdasarkan nama (exact/partial + variasi nilai
-//    terbanyak) seperti sebelumnya.
+//    berurutan sesuai posisi asli di spreadsheet).
+// 2) Kalau header posisi ternyata tidak cocok atau kosong, fallback ke
+//    pencarian berdasarkan nama (exact/loose/partial + variasi nilai).
 function resolveStatusColumn(sheetName, rows, statusColName, headers) {
   // --- Prioritas 1: berdasarkan posisi huruf kolom ---
   const letter = STATUS_COLUMN_LETTER[sheetName];
   if (letter && headers && headers.length > 0) {
     const idx = colLetterToIndex(letter);
     if (idx >= 0 && idx < headers.length) {
-      return headers[idx];
+      const candidate = headers[idx];
+      if (candidate && String(candidate).trim() !== "" && headerLooksLikeExpected(candidate, statusColName)) {
+        return candidate;
+      }
     }
   }
 
