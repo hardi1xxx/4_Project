@@ -114,14 +114,14 @@ const STATUS_GROUPS = {
     PT2: ["1.DESIGN", "2.APPROVAL"],
     MBB: ["2. L0 DRM"],
     OLO: ["01. Approval IHLD", "03. DRM", "13. HOLD"],
-    HEM: ["00. NEED APPROVAL", "02. REDESIGN", "17. HOLD"],
+    HEM: ["02. REDESIGN", "17. HOLD"],
   },
   "SURVEY/PERIJINAN": {
     FBB: ["01. PERIJINAN"],
     PT2: [],
     MBB: ["1. L0 Survey", "1.1 Done Survey", "3. L0 Progress Perizinan"],
     OLO: ["02. Survey", "04. Perizinan"],
-    HEM: ["04. PERIZINAN"],
+    HEM: ["01. SURVEY", "04. PERIZINAN"],
   },
   "PERSIAPAN": {
     FBB: ["02. PERSIAPAN"],
@@ -156,7 +156,7 @@ const STATUS_GROUPS = {
     PT2: ["5.GOLIVE"],
     MBB: ["7. L3. OA Confirmation", "5.1 L0 Progress - Issue BTS"],
     OLO: ["08. Golive", "15. OA (JT)", "16. OA (PT1)"],
-    HEM: ["09. UT", "10. GOLIVE", "11. REKON", "BAST"],
+    HEM: ["10. GOLIVE"],
   },
   "Kendala/DROP": {
     FBB: ["10.1 BAST 2025", "00. DROP"],
@@ -170,7 +170,7 @@ const STATUS_GROUPS = {
       "0.2 Confirmed Batal by Tsel",
     ],
     OLO: ["00.1 Need Confirm", "10. UT", "00.2 Confirmed Batal", "01. Drop", "00. Plan Drop", "00.3 Drop MOM"],
-    HEM: ["19. READY PT1", "20. DROP", "18. PLAN DROP"],
+    HEM: ["18. PLAN DROP", "19. READY PT1", "20. DROP"],
   },
 };
 
