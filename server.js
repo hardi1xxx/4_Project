@@ -174,18 +174,20 @@ const STATUS_GROUPS = {
   },
 };
 
-// Normalisasi teks status untuk pencocokan ketat (case/spasi diabaikan)
+// Normalisasi teks status untuk pencocokan ketat (case/spasi/tanda baca diabaikan)
 function normalizeStatusText(str) {
   return String(str ?? "")
     .trim()
     .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, "")
     .replace(/\s+/g, " ");
 }
 
-// Normalisasi "longgar": buang semua spasi & titik, untuk menangani
-// perbedaan penulisan kecil seperti "3.OGP DEPLOY" vs "3. OGP DEPLOY"
+// Normalisasi "longgar": buang semua spasi dan semua karakter non-alfanumerik,
+// jadi perbedaan kecil seperti titik, tanda kurung, atau garis bawah tidak
+// menghalangi pencocokan.
 function normalizeStatusTextLoose(str) {
-  return normalizeStatusText(str).replace(/[\s.]+/g, "");
+  return normalizeStatusText(str).replace(/[^a-z0-9]+/g, "");
 }
 
 // Bangun lookup table sekali di awal: per sheet, dari nilai status mentah
@@ -289,15 +291,18 @@ function detectHeaderRowIndex(rawRows, expectedColumnName, expectedLetterIndex) 
   if (target && typeof expectedLetterIndex === "number" && expectedLetterIndex >= 0) {
     for (let i = 0; i < scanLimit; i++) {
       const cellAtLetter = rawRows[i][expectedLetterIndex];
+      const normalizedCell = normalizeStatusText(cellAtLetter);
       if (
         normalizeKey(cellAtLetter) === target ||
-        normalizeStatusTextLoose(cellAtLetter) === targetLoose
-      )
+        normalizeStatusTextLoose(cellAtLetter) === targetLoose ||
+        normalizedCell.includes(target)
+      ) {
         return i;
+      }
     }
   }
 
-  // --- Lapis 2: exact/loose match di sembarang sel pada baris (fallback) ---
+  // --- Lapis 2: exact/loose/substring match di sembarang sel pada baris (fallback) ---
   if (target) {
     for (let i = 0; i < scanLimit; i++) {
       const row = rawRows[i];
@@ -305,7 +310,8 @@ function detectHeaderRowIndex(rawRows, expectedColumnName, expectedLetterIndex) 
       const hasLooseMatch = row.some(
         (c) => normalizeStatusTextLoose(c) === targetLoose
       );
-      if (hasExactMatch || hasLooseMatch) return i;
+      const hasSubstringMatch = row.some((c) => normalizeStatusText(c).includes(target));
+      if (hasExactMatch || hasLooseMatch || hasSubstringMatch) return i;
     }
   }
 
