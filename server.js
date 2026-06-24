@@ -54,8 +54,10 @@ const STATUS_COLUMN_LETTER = {
 // "excludeIfContains" dicocokkan secara case-insensitive & partial (substring).
 // ============================================================
 const ROW_EXCLUSION_RULES = {
-  // HEM tidak lagi menghapus baris berdasarkan kolom C secara keseluruhan,
-  // karena HEM saat ini menggunakan "CO 2025" sebagai nilai utama di kolom C.
+  HEM: {
+    columnLetter: "C", // Kolom C = STATUS WO (TIF)
+    excludeIfContains: ["CO 2025", "ADDITIONAL CO"],
+  },
 };
 
 // Cek apakah satu baris (objek hasil parsing, dengan `headers` array
