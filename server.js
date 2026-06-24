@@ -54,10 +54,9 @@ const STATUS_COLUMN_LETTER = {
 // "excludeIfContains" dicocokkan secara case-insensitive & partial (substring).
 // ============================================================
 const ROW_EXCLUSION_RULES = {
-  HEM: {
-    columnLetter: "C", // Kolom C = STATUS WO (TIF)
-    excludeIfContains: ["CO 2025", "ADDITIONAL CO"],
-  },
+  // Tidak ada aturan row exclusion untuk HEM saat ini karena semua baris
+  // HEM wajib dibaca; pengecualian CO 2025 / ADDITIONAL CO hanya diterapkan
+  // pada daftar opsi filter kolom C di UI.
 };
 
 // Cek apakah satu baris (objek hasil parsing, dengan `headers` array
@@ -519,8 +518,7 @@ async function getSheetData(sheetName, forceRefresh = false) {
 
   const { records, headers, headerIdx, totalRawRows } = await fetchSheetCSV(sheetName);
 
-  // Buang baris yang masuk aturan pengecualian (mis. HEM: kolom C berisi
-  // "CO 2025" / "ADDITIONAL CO" tidak dihitung sama sekali).
+  // Tidak ada row exclusion untuk HEM, sehingga semua baris HEM tetap dibaca.
   const filtered = records.filter((row) => !shouldExcludeRow(sheetName, row, headers));
 
   cache.data[sheetName] = filtered;
