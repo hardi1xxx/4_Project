@@ -44,6 +44,38 @@ const STATUS_COLUMN_LETTER = {
   HEM: "AC",  // Kolom AC = PROGRESS JT LAST UPDATE
 };
 
+// ============================================================
+// PENGECUALIAN BARIS (row exclusion) PER SHEET
+// Baris yang cocok dengan aturan di sini akan DIBUANG SEPENUHNYA dari
+// total/breakdown/grafik untuk sheet tersebut (bukan cuma disembunyikan
+// dari grouping status, tapi benar-benar tidak dihitung).
+//
+// Format: { SHEET: { columnLetter: "C", excludeIfContains: ["CO 2025", "ADDITIONAL CO"] } }
+// "excludeIfContains" dicocokkan secara case-insensitive & partial (substring).
+// ============================================================
+const ROW_EXCLUSION_RULES = {
+  HEM: {
+    columnLetter: "C", // Kolom C = STATUS WO (TIF)
+    excludeIfContains: ["CO 2025", "ADDITIONAL CO"],
+  },
+};
+
+// Cek apakah satu baris (objek hasil parsing, dengan `headers` array
+// berurutan sesuai posisi asli) harus DIBUANG berdasarkan ROW_EXCLUSION_RULES.
+function shouldExcludeRow(sheetName, row, headers) {
+  const rule = ROW_EXCLUSION_RULES[sheetName];
+  if (!rule) return false;
+
+  const idx = colLetterToIndex(rule.columnLetter);
+  if (idx < 0 || idx >= headers.length) return false;
+
+  const colName = headers[idx];
+  const val = normalizeKey(row[colName]);
+  if (!val) return false;
+
+  return rule.excludeIfContains.some((needle) => val.includes(normalizeKey(needle)));
+}
+
 // Konversi huruf kolom spreadsheet (A, B, ..., Z, AA, AB, ...) ke index
 // array berbasis 0. Contoh: "A" -> 0, "U" -> 20, "AC" -> 28, "AH" -> 33.
 function colLetterToIndex(letter) {
@@ -203,8 +235,11 @@ function getStatusGroup(sheetName, rawValue) {
 
 // Cache sederhana di memori supaya tidak terus-menerus menghantam Google
 const cache = {
-  data: {},     // { MBB: [...rows], OLO: [...rows], ... }
+  data: {},     // { MBB: [...rows], OLO: [...rows], ... } -- SUDAH difilter exclusion rules
   headers: {},  // { MBB: [...nama kolom berurutan sesuai posisi asli], ... }
+  rawCount: {}, // { MBB: jumlah baris SEBELUM exclusion rules, ... }
+  headerIdx: {},     // { MBB: index baris yang dipakai sebagai header, ... }
+  totalRawRows: {},  // { MBB: total baris mentah di CSV (termasuk header & baris kosong), ... }
   lastFetch: {} // { MBB: timestamp, ... }
 };
 // Refresh setiap 1 jam — data di-cache di server selama ini, dan frontend
@@ -224,15 +259,34 @@ function normalizeKey(str) {
 
 // Cari header sebenarnya: baris pertama yang punya cukup banyak sel terisi
 // (mengatasi sheet yang punya baris judul/merge cell sebelum baris header asli)
-function detectHeaderRowIndex(rawRows) {
+function detectHeaderRowIndex(rawRows, expectedColumnName) {
+  const scanLimit = Math.min(rawRows.length, 30);
+
+  // Prioritas: cari baris yang benar2 mengandung teks nama kolom status yang
+  // diharapkan (mis. "STATUS FISIK", "PROGRESS JT LAST UPDATE"). Ini jauh
+  // lebih akurat daripada menebak dari "baris paling banyak terisi", karena
+  // untuk sheet besar, baris DATA yang lengkap terisi sering punya lebih
+  // banyak sel terisi daripada baris header itu sendiri (kalau header ada
+  // sel kosong/merge) — yang menyebabkan SEMUA data sebelum baris itu
+  // ikut terhapus (inilah sebab data FBB/HEM hilang ratusan baris).
+  if (expectedColumnName) {
+    const target = normalizeKey(expectedColumnName);
+    for (let i = 0; i < scanLimit; i++) {
+      const row = rawRows[i];
+      const hasMatch = row.some((c) => {
+        const norm = normalizeKey(c);
+        return norm && (norm === target || norm.includes(target) || target.includes(norm));
+      });
+      if (hasMatch) return i;
+    }
+  }
+
+  // Fallback: baris dengan sel terisi terbanyak (hanya kalau pencarian teks gagal)
   let bestIndex = 0;
   let bestScore = -1;
-  const maxCols = rawRows.reduce((m, r) => Math.max(m, r.length), 0);
-
   for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
     const row = rawRows[i];
     const filled = row.filter((c) => String(c ?? "").trim() !== "").length;
-    // Skor: jumlah sel terisi, dengan syarat minimal isi > 1 sel dan bukan baris kosong total
     if (filled >= 2 && filled > bestScore) {
       bestScore = filled;
       bestIndex = i;
@@ -270,7 +324,7 @@ async function fetchSheetCSV(sheetName) {
 
   if (rawRows.length === 0) return [];
 
-  const headerIdx = detectHeaderRowIndex(rawRows);
+  const headerIdx = detectHeaderRowIndex(rawRows, STATUS_COLUMN[sheetName]);
   const headerRaw = rawRows[headerIdx];
 
   // Bersihkan nama header: trim, isi nama default kalau kosong, dedup duplikat
@@ -299,7 +353,7 @@ async function fetchSheetCSV(sheetName) {
       return obj;
     });
 
-  return { records, headers };
+  return { records, headers, headerIdx, totalRawRows: rawRows.length };
 }
 
 // Cari kandidat kolom yang cocok dengan nama target: gabungan exact match
@@ -387,11 +441,19 @@ async function getSheetData(sheetName, forceRefresh = false) {
     return cache.data[sheetName];
   }
 
-  const { records, headers } = await fetchSheetCSV(sheetName);
-  cache.data[sheetName] = records;
+  const { records, headers, headerIdx, totalRawRows } = await fetchSheetCSV(sheetName);
+
+  // Buang baris yang masuk aturan pengecualian (mis. HEM: kolom C berisi
+  // "CO 2025" / "ADDITIONAL CO" tidak dihitung sama sekali).
+  const filtered = records.filter((row) => !shouldExcludeRow(sheetName, row, headers));
+
+  cache.data[sheetName] = filtered;
   cache.headers[sheetName] = headers;
+  cache.rawCount[sheetName] = records.length; // sebelum dikecualikan, untuk debug
+  cache.headerIdx[sheetName] = headerIdx;
+  cache.totalRawRows[sheetName] = totalRawRows;
   cache.lastFetch[sheetName] = now;
-  return records;
+  return filtered;
 }
 
 // Ambil header asli (berurutan sesuai posisi kolom di spreadsheet) untuk
@@ -682,8 +744,14 @@ app.get("/api/debug/:sheet", async (req, res) => {
     res.json({
       sheet: sheetName,
       totalRowsFetched: rows.length,
+      totalRowsBeforeExclusion: cache.rawCount[sheetName],
+      excludedRowsCount: (cache.rawCount[sheetName] || 0) - rows.length,
+      exclusionRuleApplied: ROW_EXCLUSION_RULES[sheetName] || null,
+      totalRawCsvRows: cache.totalRawRows[sheetName],
+      headerRowIndexUsed: cache.headerIdx[sheetName],
+      headerRowContent: cache.totalRawRows[sheetName] != null ? headers : null,
       columnsDetected: headers,
-      allColumnsWithLetters, // <-- cek ini untuk pastikan huruf kolom status benar
+      allColumnsWithLetters,
       statusColumnExpected: statusCol,
       statusColumnLetter: letter || null,
       statusColumnLetterIndex: letterIdx,
