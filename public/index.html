@@ -669,6 +669,10 @@ async function addFilter(column) {
     const res = await fetch(`/api/options/${currentSheet}/${encodeURIComponent(column)}`);
     const json = await res.json();
     filterOptionsCache[column] = json.options;
+    if (!json.options || json.options.length === 0) {
+      alert(`Tidak ada opsi filter untuk kolom "${column}" selain CO 2025 / ADDITIONAL CO.`);
+      return;
+    }
     activeFilters[column] = [...json.options]; // default: semua dicentang
     renderActiveFilters();
     loadData();

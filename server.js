@@ -853,6 +853,37 @@ app.get("/api/debug/:sheet", async (req, res) => {
   }
 });
 
+// Quick HEM-specific debug: total rows and how many are CO / ADDITIONAL CO
+app.get("/api/hem-debug", async (req, res) => {
+  try {
+    const rows = await getSheetData("HEM");
+    const headers = await getSheetHeaders("HEM");
+    const colCName = headers[2] || null; // kolom C -> index 2
+    let coCount = 0;
+    rows.forEach((r) => {
+      const v = String(colCName ? r[colCName] : "").trim();
+      const norm = normalizeKey(v);
+      if (
+        norm.includes(normalizeKey("CO 2025")) ||
+        norm.includes(normalizeKey("ADDITIONAL CO"))
+      ) {
+        coCount++;
+      }
+    });
+
+    res.json({
+      sheet: "HEM",
+      totalRows: rows.length,
+      colCName,
+      coCount,
+      nonCoCount: rows.length - coCount,
+      sampleHeaders: headers.slice(0, 12),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 app.listen(PORT, () => {
