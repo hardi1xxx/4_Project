@@ -257,31 +257,51 @@ function normalizeKey(str) {
     .toUpperCase();
 }
 
-// Cari header sebenarnya: baris pertama yang punya cukup banyak sel terisi
-// (mengatasi sheet yang punya baris judul/merge cell sebelum baris header asli)
-function detectHeaderRowIndex(rawRows, expectedColumnName) {
+// Cari header sebenarnya: baris yang mengandung teks nama kolom status yang
+// diharapkan (mengatasi sheet yang punya baris judul/merge cell sebelum
+// baris header asli).
+//
+// PENTING — bug yang sudah pernah terjadi: sebelumnya pencocokan teks
+// memakai logika "salah satu mengandung yang lain" (target.includes(norm)).
+// Ini SANGAT longgar — kalau ada SEL APA SAJA di baris manapun (sebelum
+// baris header asli) yang isinya cuma teks pendek/legenda/catatan yang
+// kebetulan jadi SUBSTRING dari nama kolom yang dicari (misal sel berisi
+// "UPDATE" atau "LAST" akan otomatis "match" dengan target "PROGRESS JT
+// LAST UPDATE"), maka baris yang SALAH itu kepilih jadi header. Akibatnya
+// SEMUA baris data ikut bergeser/salah dan kolom yang dibaca jadi ngawur
+// (ini yang menyebabkan HEM kolom AC selalu kebaca "Lainnya / Belum
+// Dipetakan" untuk semua baris).
+//
+// Fix, 2 lapis (dari paling presisi ke paling longgar):
+// 1) Kalau posisi huruf kolom sudah dikonfirmasi (expectedLetterIndex),
+//    cek LANGSUNG di posisi itu saja — apakah teksnya exact match dengan
+//    nama kolom yang diharapkan. Ini PALING akurat karena memvalidasi
+//    posisi + teks sekaligus, tidak mungkin "ketipu" sel lain di kolom
+//    berbeda.
+// 2) Kalau tidak ada info posisi huruf, baru cek exact match di SEMBARANG
+//    sel pada baris itu (masih exact, bukan substring lagi).
+function detectHeaderRowIndex(rawRows, expectedColumnName, expectedLetterIndex) {
   const scanLimit = Math.min(rawRows.length, 30);
+  const target = expectedColumnName ? normalizeKey(expectedColumnName) : "";
 
-  // Prioritas: cari baris yang benar2 mengandung teks nama kolom status yang
-  // diharapkan (mis. "STATUS FISIK", "PROGRESS JT LAST UPDATE"). Ini jauh
-  // lebih akurat daripada menebak dari "baris paling banyak terisi", karena
-  // untuk sheet besar, baris DATA yang lengkap terisi sering punya lebih
-  // banyak sel terisi daripada baris header itu sendiri (kalau header ada
-  // sel kosong/merge) — yang menyebabkan SEMUA data sebelum baris itu
-  // ikut terhapus (inilah sebab data FBB/HEM hilang ratusan baris).
-  if (expectedColumnName) {
-    const target = normalizeKey(expectedColumnName);
+  // --- Lapis 1: cek persis di posisi kolom yang sudah dikonfirmasi ---
+  if (target && typeof expectedLetterIndex === "number" && expectedLetterIndex >= 0) {
     for (let i = 0; i < scanLimit; i++) {
-      const row = rawRows[i];
-      const hasMatch = row.some((c) => {
-        const norm = normalizeKey(c);
-        return norm && (norm === target || norm.includes(target) || target.includes(norm));
-      });
-      if (hasMatch) return i;
+      const cellAtLetter = rawRows[i][expectedLetterIndex];
+      if (normalizeKey(cellAtLetter) === target) return i;
     }
   }
 
-  // Fallback: baris dengan sel terisi terbanyak (hanya kalau pencarian teks gagal)
+  // --- Lapis 2: exact match di sembarang sel pada baris (fallback) ---
+  if (target) {
+    for (let i = 0; i < scanLimit; i++) {
+      const row = rawRows[i];
+      const hasExactMatch = row.some((c) => normalizeKey(c) === target);
+      if (hasExactMatch) return i;
+    }
+  }
+
+  // --- Lapis 3: baris dengan sel terisi terbanyak (fallback terakhir) ---
   let bestIndex = 0;
   let bestScore = -1;
   for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
@@ -324,7 +344,9 @@ async function fetchSheetCSV(sheetName) {
 
   if (rawRows.length === 0) return [];
 
-  const headerIdx = detectHeaderRowIndex(rawRows, STATUS_COLUMN[sheetName]);
+  const letter = STATUS_COLUMN_LETTER[sheetName];
+  const expectedLetterIndex = letter ? colLetterToIndex(letter) : -1;
+  const headerIdx = detectHeaderRowIndex(rawRows, STATUS_COLUMN[sheetName], expectedLetterIndex);
   const headerRaw = rawRows[headerIdx];
 
   // Bersihkan nama header: trim, isi nama default kalau kosong, dedup duplikat
