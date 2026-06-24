@@ -232,6 +232,26 @@ function getStatusGroup(sheetName, rawValue) {
   const looseKey = normalizeStatusTextLoose(raw);
   if (lookup.loose.has(looseKey)) return lookup.loose.get(looseKey);
 
+  if (sheetName === "HEM") {
+    return getHemStatusFallback(raw);
+  }
+
+  return UNGROUPED_LABEL;
+}
+
+function getHemStatusFallback(rawValue) {
+  const raw = normalizeStatusText(rawValue);
+  if (!raw) return UNGROUPED_LABEL;
+
+  if (raw.includes("redesign") || raw.includes("hold")) return "APPROVAL";
+  if (raw.includes("survey") || raw.includes("perizinan")) return "SURVEY/PERIJINAN";
+  if (raw.includes("persiapan")) return "PERSIAPAN";
+  if (raw.includes("material") || raw.includes("matdev") || raw.includes("delivery")) return "MATDEV";
+  if (raw.includes("ogp") || raw.includes("instalasi") || raw.includes("installation")) return "INSTALASI";
+  if (raw.includes("finish")) return "FINISH INSTAL";
+  if (raw.includes("golive") || raw.includes("uat") || raw.includes("ut") || raw.includes("bast") || raw.includes("rekon") || raw.includes("pemberkasan") || raw.includes("oa")) return "TESTCOM/GOLIVE";
+  if (raw.includes("plan drop") || raw.includes("ready pt") || raw.includes("drop")) return "Kendala/DROP";
+
   return UNGROUPED_LABEL;
 }
 
