@@ -54,10 +54,8 @@ const STATUS_COLUMN_LETTER = {
 // "excludeIfContains" dicocokkan secara case-insensitive & partial (substring).
 // ============================================================
 const ROW_EXCLUSION_RULES = {
-  HEM: {
-    columnLetter: "C", // Kolom C = STATUS WO (TIF)
-    excludeIfContains: ["CO 2025", "ADDITIONAL CO"],
-  },
+  // HEM tidak lagi menghapus baris berdasarkan kolom C secara keseluruhan,
+  // karena HEM saat ini menggunakan "CO 2025" sebagai nilai utama di kolom C.
 };
 
 // Cek apakah satu baris (objek hasil parsing, dengan `headers` array
@@ -668,9 +666,20 @@ app.get("/api/options/:sheet/:column", async (req, res) => {
   try {
     const rows = await getSheetData(sheetName);
     const values = new Set();
+    const normalizedColumn = normalizeKey(column);
+    const shouldFilterHemColumnC =
+      sheetName === "HEM" && normalizedColumn === normalizeKey("STATUS WO (TIF)");
+
     rows.forEach((r) => {
       const v = String(r[column] ?? "").trim();
-      if (v) values.add(v);
+      if (!v) return;
+      if (shouldFilterHemColumnC) {
+        const normalized = normalizeKey(v);
+        if (normalized.includes(normalizeKey("CO 2025")) || normalized.includes(normalizeKey("ADDITIONAL CO"))) {
+          return;
+        }
+      }
+      values.add(v);
     });
     res.json({ column, options: Array.from(values).sort() });
   } catch (err) {
