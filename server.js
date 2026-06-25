@@ -139,9 +139,9 @@ const GROUP_ORDER = [
   "MATDEV",
   "INSTALASI",
   "FINISH INSTAL",
+  "5.1 L0 Progress - Issue BTS",
+  "7. L3. OA Confirmation",
   "TESTCOM/GOLIVE",
-  "Issue BTS",
-  "OA Confirmation",
   "Kendala/DROP",
 ];
 
@@ -197,10 +197,10 @@ const STATUS_GROUPS = {
     HEM: ["10. GOLIVE"],
     QE: ["4.COMTEST", "5.UJI TERIMA"],
   },
-    "Issue BTS": {
+  "5.1 L0 Progress - Issue BTS": {
     MBB: ["5.1 L0 Progress - Issue BTS"],
   },
-  "OA Confirmation": {
+  "7. L3. OA Confirmation": {
     MBB: ["7. L3. OA Confirmation"],
   },
   "Kendala/DROP": {
