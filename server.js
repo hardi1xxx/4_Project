@@ -308,6 +308,27 @@ function getStatusFallback(sheetName, rawValue) {
   return null;
 }
 
+function inferMbbStatusFromNotes(row) {
+  const note = normalizeStatusText(String(row["Note Progress"] || "") + " " + String(row["Resume Progress"] || ""));
+  const extra = normalizeStatusText(String(row["Status Recti"] || "") + " " + String(row["Status Tsel"] || ""));
+  if (!note && !extra) return null;
+
+  const has = (terms, source = note) => terms.some((term) => source.includes(term));
+
+  if (has(["approval", "approve", "approved"])) return "APPROVAL";
+  if (has(["survey", "perijinan", "perizinan", "aanwijzing", "pid"])) return "SURVEY/PERIJINAN";
+  if (has(["matdev", "material", "comcase", "nilai cc", "cc", "anggaran", "pembayaran", "dana cc", "kompensasi"])) return "MATDEV";
+  if (has(["finish instal", "finish instalasi", "done install", "done instalasi", "install", "instalasi", "instal", "ont"])) return "FINISH INSTAL";
+  if (has(["golive", "uat", "bast", "rekon", "pemberkasan", "oa confirmation", "oa ", "on air"], note)) return "TESTCOM/GOLIVE";
+  if (has(["drop", "batal", "hold", "plan drop", "drop mom"], note)) return "Kendala/DROP";
+
+  if (has(["6 on air", "on air", "done", "done install", "done instalasi", "ny install"], extra)) {
+    return extra.includes("on air") ? "TESTCOM/GOLIVE" : "FINISH INSTAL";
+  }
+
+  return null;
+}
+
 function getHemStatusFallback(rawValue) {
   const raw = normalizeStatusText(rawValue);
   if (!raw) return UNGROUPED_LABEL;
@@ -632,6 +653,16 @@ async function computeStatusBreakdown(sheetName, rows, statusCol) {
     let val = String(getStatusValue(row, resolvedCol) ?? "").trim();
     if (!val) val = "(Kosong)";
     else withStatus++;
+
+    if (sheetName === "MBB") {
+      const rawGroup = getStatusGroup(sheetName, val);
+      if (rawGroup === "7. L3. OA Confirmation" || rawGroup === "UNGROUPED" || val === "(Kosong)" || val === "OA") {
+        const inferred = inferMbbStatusFromNotes(row);
+        if (inferred) {
+          val = inferred;
+        }
+      }
+    }
 
     rawCounts[val] = (rawCounts[val] || 0) + 1;
 
