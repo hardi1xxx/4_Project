@@ -278,11 +278,30 @@ function getStatusGroup(sheetName, rawValue) {
   const looseKey = normalizeStatusTextLoose(raw);
   if (lookup.loose.has(looseKey)) return lookup.loose.get(looseKey);
 
+  const fallbackGroup = getStatusFallback(sheetName, raw);
+  if (fallbackGroup) return fallbackGroup;
+
   if (sheetName === "HEM") {
     return getHemStatusFallback(raw);
   }
 
   return UNGROUPED_LABEL;
+}
+
+function getStatusFallback(sheetName, rawValue) {
+  const raw = normalizeStatusText(rawValue);
+  if (!raw) return null;
+
+  if (sheetName === "MBB") {
+    if (raw.includes("5 1 l0 progress") && raw.includes("issue bts")) {
+      return "5.1 L0 Progress - Issue BTS";
+    }
+    if (raw.includes("7 l3 oa confirmation") || raw.includes("oa confirmation")) {
+      return "7. L3. OA Confirmation";
+    }
+  }
+
+  return null;
 }
 
 function getHemStatusFallback(rawValue) {
