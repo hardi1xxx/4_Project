@@ -662,7 +662,12 @@ async function computeStatusBreakdown(sheetName, rows, statusCol) {
 
     if (sheetName === "MBB") {
       const rawGroup = getStatusGroup(sheetName, val);
-      if (rawGroup === "OA" || rawGroup === UNGROUPED_LABEL || val === "(Kosong)") {
+      if (
+        rawGroup === "OA" ||
+        rawGroup === "7. L3. OA Confirmation" ||
+        rawGroup === UNGROUPED_LABEL ||
+        val === "(Kosong)"
+      ) {
         const inferred = inferMbbStatusFromNotes(row);
         if (inferred) {
           val = inferred;
