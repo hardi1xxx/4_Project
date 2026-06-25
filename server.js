@@ -285,6 +285,10 @@ function getStatusGroup(sheetName, rawValue) {
     return getHemStatusFallback(raw);
   }
 
+  if (sheetName === "MBB") {
+    return raw;
+  }
+
   return UNGROUPED_LABEL;
 }
 
