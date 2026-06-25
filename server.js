@@ -90,11 +90,22 @@ function shouldExcludeRow(sheetName, row, headers) {
   const rule = ROW_EXCLUSION_RULES[sheetName];
   if (!rule) return false;
 
+  const statusLetter = STATUS_COLUMN_LETTER[sheetName];
+  if (sheetName === "QE" && statusLetter) {
+    const statusIdx = colLetterToIndex(statusLetter);
+    if (statusIdx >= 0 && statusIdx < headers.length) {
+      const statusHeader = headers[statusIdx];
+      const statusVal = normalizeKey(row[statusHeader]);
+      if (!statusVal) return true;
+    }
+  }
+
   const idx = colLetterToIndex(rule.columnLetter);
   if (idx < 0 || idx >= headers.length) return false;
 
   const colName = headers[idx];
-  const val = normalizeKey(row[colName]);
+  const rawValue = row[colName];
+  const val = normalizeKey(rawValue);
   if (!val) return false;
 
   return rule.excludeIfContains.some((needle) => val.includes(normalizeKey(needle)));
