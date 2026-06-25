@@ -57,6 +57,14 @@ const ROW_EXCLUSION_RULES = {
   HEM: {
     columnLetter: "C",
     excludeIfContains: ["CO 2025", "ADDITIONAL CO"]
+  },
+  MBB: {
+    columnLetter: "U",
+    excludeIfContains: ["0.3 Drop MoM"]
+  },
+  FBB: {
+    columnLetter: "BU",
+    excludeIfContains: ["C.Tel.55/TK 000/JIFC-2Z50000/2026"]
   }
 };
 
