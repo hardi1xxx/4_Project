@@ -315,10 +315,16 @@ function inferMbbStatusFromNotes(row) {
 
   const has = (terms, source = note) => terms.some((term) => source.includes(term));
 
-  if (has(["approval", "approve", "approved"])) return "APPROVAL";
-  if (has(["survey", "perijinan", "perizinan", "aanwijzing", "pid"])) return "SURVEY/PERIJINAN";
-  if (has(["matdev", "material", "comcase", "nilai cc", "cc", "anggaran", "pembayaran", "dana cc", "kompensasi"])) return "MATDEV";
-  if (has(["finish instal", "finish instalasi", "done install", "done instalasi", "install", "instalasi", "instal", "ont"])) return "FINISH INSTAL";
+  if (has(["issue bts", "issuebts", "bts"], note) && has(["progress"], note)) {
+    return "5.1 L0 Progress - Issue BTS";
+  }
+  if (has(["oa confirmation", "oa konfirmasi", "oa confirm", "oa", "confirmation"], note)) {
+    return "7. L3. OA Confirmation";
+  }
+  if (has(["approval", "approve", "approved"], note)) return "APPROVAL";
+  if (has(["survey", "perijinan", "perizinan", "aanwijzing", "pid"], note)) return "SURVEY/PERIJINAN";
+  if (has(["matdev", "material", "comcase", "nilai cc", "cc", "anggaran", "pembayaran", "dana cc", "kompensasi"], note)) return "MATDEV";
+  if (has(["finish instal", "finish instalasi", "done install", "done instalasi", "install", "instalasi", "instal", "ont"], note)) return "FINISH INSTAL";
   if (has(["golive", "uat", "bast", "rekon", "pemberkasan", "oa confirmation", "oa ", "on air"], note)) return "TESTCOM/GOLIVE";
   if (has(["drop", "batal", "hold", "plan drop", "drop mom"], note)) return "Kendala/DROP";
 
@@ -656,7 +662,7 @@ async function computeStatusBreakdown(sheetName, rows, statusCol) {
 
     if (sheetName === "MBB") {
       const rawGroup = getStatusGroup(sheetName, val);
-      if (rawGroup === "7. L3. OA Confirmation" || rawGroup === "UNGROUPED" || val === "(Kosong)" || val === "OA") {
+      if (rawGroup === "OA" || rawGroup === UNGROUPED_LABEL || val === "(Kosong)") {
         const inferred = inferMbbStatusFromNotes(row);
         if (inferred) {
           val = inferred;
