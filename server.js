@@ -18,7 +18,7 @@ const SPREADSHEET_ID =
   process.env.SHEET_ID || "1MqKFY3mn7-Qa2xn9kslKPKYCF15ONWPf71_dZuIF458";
 
 // Daftar sheet/tab yang dimonitor
-const SHEET_NAMES = ["MBB", "OLO", "HEM", "FBB", "PT2", "QERelok"];
+const SHEET_NAMES = ["MBB", "OLO", "HEM", "FBB", "PT2", "QE"];
 
 // Jika project logical name berbeda dengan nama tab di Google Sheets,
 // gunakan mapping ini. Contoh: QE dipetakan ke tab "QERelok".
