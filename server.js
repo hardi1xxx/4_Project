@@ -140,6 +140,8 @@ const GROUP_ORDER = [
   "INSTALASI",
   "FINISH INSTAL",
   "TESTCOM/GOLIVE",
+  "Issue BTS",
+  "OA Confirmation",
   "Kendala/DROP",
 ];
 
@@ -187,13 +189,19 @@ const STATUS_GROUPS = {
     OLO: ["07. Finish Instalasi"],
     HEM: ["07. FINISH INSTALASI"],
   },
+
   "TESTCOM/GOLIVE": {
     FBB: ["06. GOLIVE", "07. UT", "08. PEMBERKASAN", "09. REKON", "10. BAST"],
     PT2: ["5.GOLIVE"],
-    MBB: ["7. L3. OA Confirmation", "5.1 L0 Progress - Issue BTS"],
     OLO: ["08. Golive", "15. OA (JT)", "16. OA (PT1)"],
     HEM: ["10. GOLIVE"],
     QE: ["4.COMTEST", "5.UJI TERIMA"],
+  },
+    "Issue BTS": {
+    MBB: ["5.1 L0 Progress - Issue BTS"],
+  },
+  "OA Confirmation": {
+    MBB: ["7. L3. OA Confirmation"],
   },
   "Kendala/DROP": {
     FBB: ["10.1 BAST 2025", "00. DROP"],
