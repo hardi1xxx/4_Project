@@ -18,7 +18,17 @@ const SPREADSHEET_ID =
   process.env.SHEET_ID || "1MqKFY3mn7-Qa2xn9kslKPKYCF15ONWPf71_dZuIF458";
 
 // Daftar sheet/tab yang dimonitor
-const SHEET_NAMES = ["MBB", "OLO", "HEM", "FBB", "PT2"];
+const SHEET_NAMES = ["MBB", "OLO", "HEM", "FBB", "PT2", "QERelok"];
+
+// Jika project logical name berbeda dengan nama tab di Google Sheets,
+// gunakan mapping ini. Contoh: QE dipetakan ke tab "QERelok".
+const SHEET_TAB_NAMES = {
+  QE: "QERelok",
+};
+
+function resolveSheetTabName(sheetName) {
+  return SHEET_TAB_NAMES[sheetName] || sheetName;
+}
 
 // Kolom status utama per sheet (untuk kartu angka besar & grafik)
 const STATUS_COLUMN = {
@@ -27,6 +37,7 @@ const STATUS_COLUMN = {
   FBB: "Status Fisik",
   HEM: "PROGRESS JT LAST UPDATE",
   PT2: "STATUS LOP",
+  QE: "STATUS FISIK",
 };
 
 // ============================================================
@@ -42,6 +53,7 @@ const STATUS_COLUMN_LETTER = {
   FBB: "AH",  // Kolom AH = Status Fisik
   PT2: "K",   // Kolom K = STATUS LOP
   HEM: "AC",  // Kolom AC = PROGRESS JT LAST UPDATE
+  QE: "S",    // Kolom S = STATUS FISIK pada tab QERelok
 };
 
 // ============================================================
@@ -65,6 +77,10 @@ const ROW_EXCLUSION_RULES = {
   FBB: {
     columnLetter: "BU",
     excludeIfContains: ["C.Tel.55/TK 000/JIFC-2Z50000/2026"]
+  },
+  QE: {
+    columnLetter: "J",
+    excludeIfContains: ["0.SPMK TELKOM"]
   }
 };
 
@@ -151,6 +167,7 @@ const STATUS_GROUPS = {
     MBB: ["5.0 L0 Progress FO"],
     OLO: ["06. Instalasi"],
     HEM: ["06. OGP INSTALASI"],
+    QE: ["1.PERSIAPAN/PERIZINAN", "2.INSTALASI", "3.FINISH INSTALASI"],
   },
   "FINISH INSTAL": {
     FBB: ["05. FINISH INSTALASI"],
@@ -165,6 +182,7 @@ const STATUS_GROUPS = {
     MBB: ["7. L3. OA Confirmation", "5.1 L0 Progress - Issue BTS"],
     OLO: ["08. Golive", "15. OA (JT)", "16. OA (PT1)"],
     HEM: ["10. GOLIVE"],
+    QE: ["4.COMTEST", "5.UJI TERIMA"],
   },
   "Kendala/DROP": {
     FBB: ["10.1 BAST 2025", "00. DROP"],
@@ -178,6 +196,7 @@ const STATUS_GROUPS = {
       "0.2 Confirmed Batal by Tsel",
     ],
     OLO: ["00.1 Need Confirm", "10. UT", "00.2 Confirmed Batal", "01. Drop", "00. Plan Drop", "00.3 Drop MOM"],
+    QE: ["0.DROP"],
     HEM: ["18. PLAN DROP", "19. READY PT1", "20. DROP"],
   },
 };
@@ -358,8 +377,9 @@ function detectHeaderRowIndex(rawRows, expectedColumnName, expectedLetterIndex) 
 }
 
 async function fetchSheetCSV(sheetName) {
+  const tabName = resolveSheetTabName(sheetName);
   const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
-    sheetName
+    tabName
   )}`;
 
   const res = await fetch(url, { redirect: "follow" });
