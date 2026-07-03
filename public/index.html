@@ -506,7 +506,7 @@ const RELATED_PREVIEW_LIMIT = 8;
 // Data hanya benar2 di-refetch kalau sudah lewat CACHE_TTL_MS (1 jam)
 // atau user klik tombol "Refresh Data" secara manual.
 // ============================================================
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
+const CACHE_TTL_MS = 60 * 1000; // 1 menit
 const cache = {
   perSheet: {},   // { MBB: { data: {...}, stats: {...}, ts: number } }
   summary: null,  // { statsAll: {...}, ts: number }
