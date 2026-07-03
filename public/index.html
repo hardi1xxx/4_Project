@@ -325,6 +325,66 @@
   .summary-overall .item .label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
   .summary-overall .item .val { font-size: 26px; font-weight: 800; color: var(--accent); margin-top: 4px; }
   .cache-note { font-size: 11.5px; color: var(--muted); }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 1000;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    width: min(100%, 800px);
+    max-height: min(100%, 90vh);
+    overflow: auto;
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+    padding: 22px 24px;
+    position: relative;
+  }
+  .modal h2 {
+    margin: 0 0 10px;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text);
+  }
+  .modal .modal-meta {
+    margin-bottom: 18px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .modal .modal-content {
+    font-size: 13px;
+    color: var(--text);
+  }
+  .modal .modal-actions {
+    margin-top: 18px;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .modal .modal-close {
+    position: absolute;
+    right: 18px;
+    top: 18px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+  }
+  .clickable-cell {
+    display: inline-block;
+    width: 100%;
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .clickable-cell:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -395,6 +455,16 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="detailModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <button class="modal-close" id="modalCloseBtn" aria-label="Tutup">✕</button>
+    <h2 id="modalTitle">Detail</h2>
+    <div class="modal-meta" id="modalMeta"></div>
+    <div class="modal-content" id="modalContent"></div>
+    <div class="modal-actions" id="modalActions"></div>
+  </div>
+</div>
+
 <footer>Dashboard Monitoring · Telkom Akses · Danantara Indonesia · Infranexia · Auto-refresh tiap 60 detik</footer>
 
 <script>
@@ -404,6 +474,9 @@ const SUMMARY_KEY = "__SUMMARY__";
 let currentSheet = SHEETS[0]; // currentSheet can also be SUMMARY_KEY
 let activeFilters = {};
 let currentColumns = [];
+let currentRows = [];
+let currentStatusColumn = "";
+let pendingFilter = null;
 let barChartInstance = null;
 let donutChartInstance = null;
 let summaryCompareChartInstance = null;
@@ -423,6 +496,9 @@ const summaryOverallEl = document.getElementById("summaryOverall");
 
 const PALETTE = ["#2563eb", "#16a34a", "#d97706", "#dc2626", "#7c3aed", "#0891b2", "#64748b", "#db2777"];
 const CARD_CLASSES = ["c0", "c1", "c2", "c3", "c4"];
+const MODAL_ROWS_PER_PAGE = 10;
+let modalPageState = null;
+const RELATED_PREVIEW_LIMIT = 8;
 
 // ============================================================
 // CACHE LAYER (di sisi browser)
@@ -458,10 +534,11 @@ function renderTabs() {
   });
 }
 
-function switchTab(sheetOrSummary) {
+function switchTab(sheetOrSummary, deferredFilter = null) {
   currentSheet = sheetOrSummary;
   activeFilters = {};
   filterOptionsCache = {};
+  pendingFilter = deferredFilter;
   searchInput.value = "";
   renderTabs();
   if (currentSheet === SUMMARY_KEY) {
@@ -504,6 +581,7 @@ async function loadStats(forceRefresh = false) {
       return;
     }
 
+    currentStatusColumn = json.statusColumn || "";
     statsGrid.innerHTML = "";
     const totalCard = document.createElement("div");
     totalCard.className = "stat-card total";
@@ -515,6 +593,8 @@ async function loadStats(forceRefresh = false) {
       const card = document.createElement("div");
       card.className = "stat-card " + (CARD_CLASSES[i % CARD_CLASSES.length]);
       card.innerHTML = `<div class="label" title="${escapeHtml(item.status)}">${escapeHtml(item.status)}</div><div class="num">${item.count}</div><div class="pct">${pct}% dari total</div>`;
+      card.style.cursor = "pointer";
+      card.onclick = () => openStatusDetails(item.status, item.count, currentSheet);
       statsGrid.appendChild(card);
     });
 
@@ -603,6 +683,7 @@ async function loadData(forceRefresh = false) {
   if (!forceRefresh && !hasSearchOrFilter && cached && cached.data && isCacheFresh(cached.dataTs)) {
     const json = cached.data;
     currentColumns = json.columns;
+    currentRows = json.rows || [];
     populateFilterColumnOptions(json.columns);
     renderActiveFilters();
     renderTable(json.columns, json.rows);
@@ -633,9 +714,16 @@ async function loadData(forceRefresh = false) {
     }
 
     currentColumns = json.columns;
+    currentRows = json.rows || [];
     populateFilterColumnOptions(json.columns);
     renderActiveFilters();
     renderTable(json.columns, json.rows);
+
+    if (pendingFilter) {
+      const fn = pendingFilter;
+      pendingFilter = null;
+      fn();
+    }
 
     metaInfo.innerHTML = `Menampilkan <span class="badge">${json.total}</span> baris pada sheet <b>${json.sheet}</b>`;
     lastUpdatedEl.textContent = "Data terakhir: " + new Date(json.lastUpdated).toLocaleString("id-ID");
@@ -771,9 +859,12 @@ function renderTable(columns, rows) {
   let html = "<table><thead><tr>";
   columns.forEach((c) => (html += `<th>${escapeHtml(c)}</th>`));
   html += "</tr></thead><tbody>";
-  rows.forEach((row) => {
+  rows.forEach((row, rowIndex) => {
     html += "<tr>";
-    columns.forEach((c) => { html += `<td>${escapeHtml(row[c] ?? "")}</td>`; });
+    columns.forEach((c) => {
+      const value = row[c] ?? "";
+      html += `<td><span class="clickable-cell" data-row="${rowIndex}" data-col="${escapeHtml(c)}">${escapeHtml(value)}</span></td>`;
+    });
     html += "</tr>";
   });
   html += "</tbody></table>";
@@ -782,6 +873,210 @@ function renderTable(columns, rows) {
 
 function escapeHtml(str) {
   return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function getMatchingRows(column, value, maxCount = 10) {
+  if (!column || value === undefined || value === null || currentRows.length === 0) return [];
+  return currentRows.filter((row) => String(row[column] ?? "").toLowerCase() === String(value).toLowerCase()).slice(0, maxCount);
+}
+
+function getAllMatchingRows(column, value) {
+  if (!column || value === undefined || value === null || currentRows.length === 0) return [];
+  return currentRows.filter((row) => String(row[column] ?? "").toLowerCase() === String(value).toLowerCase());
+}
+
+function updateModalContent(newHtml) {
+  document.getElementById("modalContent").innerHTML = newHtml;
+}
+
+function renderModalPagination(totalPages, currentPage) {
+  if (totalPages <= 1) return "";
+  let buttons = "<div style='margin-top:14px;display:flex;flex-wrap:wrap;gap:8px;'>";
+  for (let i = 0; i < totalPages; i++) {
+    const active = i === currentPage ? "background:#2563eb;color:#fff;" : "";
+    buttons += `<button style='padding:8px 12px;border-radius:8px;border:1px solid #d1d5db;${active}' onclick='renderModalRowsPage(${i})'>${i + 1}</button>`;
+  }
+  buttons += "</div>";
+  return buttons;
+}
+
+function renderModalRowsPage(page) {
+  if (!modalPageState) return;
+  const rows = modalPageState.rows;
+  const columns = modalPageState.columns;
+  const totalPages = Math.max(1, Math.ceil(rows.length / MODAL_ROWS_PER_PAGE));
+  const normalizedPage = Math.max(0, Math.min(page, totalPages - 1));
+  modalPageState.page = normalizedPage;
+  const start = normalizedPage * MODAL_ROWS_PER_PAGE;
+  const slice = rows.slice(start, start + MODAL_ROWS_PER_PAGE);
+  const paginationHtml = renderModalPagination(totalPages, normalizedPage);
+  const pageLabel = `<div style="margin-top:12px;color:var(--muted);font-size:12px;">Menampilkan halaman ${normalizedPage + 1} dari ${totalPages} (${rows.length} baris terkait)</div>`;
+  updateModalContent(`${modalPageState.headerHtml}${renderRowsAsTable(columns, slice)}${pageLabel}${paginationHtml}`);
+}
+
+function prepareModalRowsPagination(rows, columns, headerHtml) {
+  modalPageState = { rows, columns, page: 0, headerHtml };
+  renderModalRowsPage(0);
+}
+
+function renderRowsAsTable(columns, rows) {
+  if (!rows || rows.length === 0) return `<div class="empty">Tidak ada baris terkait.</div>`;
+  const header = columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+  const body = rows
+    .map((row) => {
+      const cells = columns.map((c) => `<td>${escapeHtml(row[c] ?? "")}</td>`).join("");
+      return `<tr>${cells}</tr>`;
+    })
+    .join("");
+  return `<div style="overflow:auto;max-height:260px;"><table style="width:100%;border-collapse:collapse;"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+async function applyFilterAndLoad(column, value) {
+  if (!column || value === undefined || value === null || value === "") {
+    openModal("Filter tidak tersedia", "", `<p>Nilai kolom tidak valid untuk filter.</p>`, [{ label: "Tutup", className: "", onClick: closeModal }]);
+    return;
+  }
+  if (!currentColumns.includes(column)) {
+    openModal("Filter tidak tersedia", `Kolom ${escapeHtml(column)} tidak ditemukan`, `<p>Silakan buka sheet yang sesuai terlebih dahulu.</p>`, [{ label: "Tutup", className: "", onClick: closeModal }]);
+    return;
+  }
+  try {
+    const res = await fetch(`/api/options/${currentSheet}/${encodeURIComponent(column)}`);
+    const json = await res.json();
+    filterOptionsCache[column] = json.options || [];
+    activeFilters = { [column]: [value] };
+    populateFilterColumnOptions(currentColumns);
+    renderActiveFilters();
+    loadData();
+  } catch (err) {
+    console.error(err);
+    openModal("Gagal memuat filter", err.message, "", [{ label: "Tutup", className: "", onClick: closeModal }]);
+  }
+}
+
+function openModal(title, metaText, contentHtml, actions = []) {
+  const backdrop = document.getElementById("detailModal");
+  document.getElementById("modalTitle").textContent = title;
+  document.getElementById("modalMeta").textContent = metaText || "";
+  document.getElementById("modalContent").innerHTML = contentHtml;
+  const actionsEl = document.getElementById("modalActions");
+  actionsEl.innerHTML = "";
+  actions.forEach((action) => {
+    const btn = document.createElement("button");
+    btn.textContent = action.label;
+    btn.className = action.className || "primary";
+    btn.onclick = action.onClick;
+    actionsEl.appendChild(btn);
+  });
+  backdrop.classList.add("open");
+}
+
+function closeModal() {
+  const backdrop = document.getElementById("detailModal");
+  backdrop.classList.remove("open");
+}
+
+function showRowDetails(row, column) {
+  const fields = Object.keys(row || {});
+  const content = fields.map((key) => {
+    return `<div style="margin-bottom:8px;"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(row[key])}</div>`;
+  }).join("");
+  const actions = [];
+  const normalized = String(column || "").toLowerCase();
+  let relatedHtml = "";
+  if (row && row[column] !== undefined && (normalized.includes("status") || normalized.includes("branch"))) {
+    const preview = getMatchingRows(column, row[column], RELATED_PREVIEW_LIMIT);
+    const allMatches = getAllMatchingRows(column, row[column]);
+    if (preview.length > 0) {
+      relatedHtml = `<div style="margin-top:16px;"><strong>Baris terkait sama ${escapeHtml(column)}:</strong>${renderRowsAsTable(currentColumns, preview)}${allMatches.length > RELATED_PREVIEW_LIMIT ? `<div style="margin-top:8px;color:var(--muted);font-size:12px;">Menampilkan ${RELATED_PREVIEW_LIMIT} dari ${allMatches.length} baris terkait.</div>` : ""}</div>`;
+    }
+    actions.push({
+      label: `Tampilkan semua baris terkait ${escapeHtml(column)}`,
+      className: "",
+      onClick: () => {
+        prepareModalRowsPagination(allMatches, currentColumns, `<div>${content}</div><div style="margin-top:16px;"><strong>Semua baris terkait ${escapeHtml(column)}:</strong></div>`);
+      },
+    });
+  }
+  actions.push({ label: "Tutup", className: "", onClick: closeModal });
+  openModal(
+    `Detail baris ${column ? `- ${column}` : ""}`,
+    `Sheet: ${currentSheet}`,
+    `<div>${content}</div>${relatedHtml}`,
+    actions
+  );
+}
+
+function openStatusDetails(status, count, sheet) {
+  const actions = [];
+  if (currentStatusColumn) {
+    actions.push({
+      label: `Lihat semua baris terkait ${currentStatusColumn}`,
+      className: "primary",
+      onClick: () => {
+        closeModal();
+        switchTab(sheet, () => applyFilterAndLoad(currentStatusColumn, status));
+      },
+    });
+  }
+  actions.push({ label: "Tutup", className: "", onClick: closeModal });
+  const previewRows = currentSheet === sheet ? getMatchingRows(currentStatusColumn, status, RELATED_PREVIEW_LIMIT) : [];
+  const allRows = currentSheet === sheet ? getAllMatchingRows(currentStatusColumn, status) : [];
+  const listContent = previewRows.length > 0
+    ? `<div style="margin-top:16px;"><strong>Contoh baris dengan ${escapeHtml(currentStatusColumn)} = ${escapeHtml(status)}:</strong>${renderRowsAsTable(currentColumns, previewRows)}${allRows.length > RELATED_PREVIEW_LIMIT ? `<div style="margin-top:8px;color:var(--muted);font-size:12px;">Menampilkan ${RELATED_PREVIEW_LIMIT} dari ${allRows.length} baris terkait.</div>` : ""}</div>`
+    : `<div style="margin-top:16px;color:var(--muted);">Buka sheet ${escapeHtml(sheet)} untuk melihat baris terkait.</div>`;
+  if (allRows.length > RELATED_PREVIEW_LIMIT) {
+    actions.push({
+      label: "Tampilkan semua baris terkait",
+      className: "",
+      onClick: () => {
+        prepareModalRowsPagination(allRows, currentColumns, `<p>Ini adalah ringkasan status untuk sheet <strong>${escapeHtml(sheet)}</strong>.</p><p>Semua baris dengan ${escapeHtml(currentStatusColumn)} = ${escapeHtml(status)}:</p>`);
+      },
+    });
+  }
+  openModal(
+    `Status: ${status}`,
+    `Sheet: ${sheet} · ${count} baris`,
+    `<p>Ini adalah ringkasan status untuk sheet <strong>${escapeHtml(sheet)}</strong>.</p><p>Gunakan tombol di bawah untuk menampilkan baris data terkait.</p>${listContent}`,
+    actions
+  );
+}
+
+function openSummarySheetDetails(sheet, stats) {
+  const breakdownItems = (stats.breakdown || []).map((item) => {
+    return `<li style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span>${escapeHtml(item.status)}</span><span>${item.count}</span></li>`;
+  }).join("");
+  const rows = currentSheet === sheet && stats.statusColumn ? getMatchingRows(stats.statusColumn, stats.breakdown?.[0]?.status || "", RELATED_PREVIEW_LIMIT) : [];
+  const allRows = currentSheet === sheet && stats.statusColumn ? getAllMatchingRows(stats.statusColumn, stats.breakdown?.[0]?.status || "") : [];
+  const rowPreview = rows.length > 0
+    ? `<div style="margin-top:16px;"><strong>Contoh baris di sheet ${escapeHtml(sheet)}:</strong>${renderRowsAsTable(currentColumns, rows)}${allRows.length > RELATED_PREVIEW_LIMIT ? `<div style="margin-top:8px;color:var(--muted);font-size:12px;">Menampilkan ${RELATED_PREVIEW_LIMIT} dari ${allRows.length} baris terkait.</div>` : ""}</div>`
+    : `<div style="margin-top:16px;color:var(--muted);">Buka sheet ${escapeHtml(sheet)} untuk melihat contoh baris terkait.</div>`;
+  const actions = [];
+  if (allRows.length > RELATED_PREVIEW_LIMIT) {
+    actions.push({
+      label: "Tampilkan semua baris terkait",
+      className: "",
+      onClick: () => {
+        prepareModalRowsPagination(allRows, currentColumns, `<p>Kolom status: <strong>${escapeHtml(stats.statusColumn || "-")}</strong></p><ul style="list-style:none;padding:0;margin:0;">${breakdownItems}</ul><div style="margin-top:16px;"><strong>Semua baris di sheet ${escapeHtml(sheet)}:</strong></div>`);
+      },
+    });
+  }
+  actions.push({
+    label: `Lihat semua baris terkait di ${sheet}`,
+    className: "primary",
+    onClick: () => {
+      closeModal();
+      switchTab(sheet);
+      loadAll(true);
+    },
+  });
+  actions.push({ label: "Tutup", className: "", onClick: closeModal });
+  openModal(
+    `Ringkasan ${sheet}`,
+    `Total: ${stats.total} baris`,
+    `<p>Kolom status: <strong>${escapeHtml(stats.statusColumn || "-")}</strong></p><ul style="list-style:none;padding:0;margin:0;">${breakdownItems}</ul>${rowPreview}`,
+    actions
+  );
 }
 
 // ============================================================
@@ -899,6 +1194,8 @@ function renderSummary(statsAll, fromCache) {
       <div class="total-line">Kolom status: <b>${escapeHtml(d.statusColumn)}</b> · ${d.withStatus} dari ${d.total} baris terisi</div>
       <ul class="breakdown-list">${itemsHtml || '<li class="name">Tidak ada data</li>'}</ul>
     `;
+    card.style.cursor = "pointer";
+    card.onclick = () => openSummarySheetDetails(sheetName, d);
     summaryGridEl.appendChild(card);
   });
 }
@@ -990,6 +1287,22 @@ filterColumnSelect.onchange = () => {
   filterColumnSelect.value = "";
   if (col) addFilter(col);
 };
+
+document.getElementById("modalCloseBtn").onclick = closeModal;
+document.getElementById("detailModal").addEventListener("click", (e) => {
+  if (e.target.id === "detailModal") closeModal();
+});
+tableArea.addEventListener("click", (e) => {
+  const span = e.target.closest(".clickable-cell");
+  if (!span) return;
+  const rowIndex = Number(span.dataset.row);
+  if (!Number.isFinite(rowIndex)) return;
+  const row = currentRows[rowIndex];
+  showRowDetails(row, span.dataset.col);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeModal();
+});
 
 // ============================================================
 // INIT + AUTO REFRESH
