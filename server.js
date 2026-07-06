@@ -57,58 +57,82 @@ const STATUS_COLUMN_LETTER = {
 };
 
 // ============================================================
-// PENGECUALIAN BARIS (row exclusion) PER SHEET
+// PENGECUALIAN / FILTER BARIS PER SHEET
 // Baris yang cocok dengan aturan di sini akan DIBUANG SEPENUHNYA dari
 // total/breakdown/grafik untuk sheet tersebut (bukan cuma disembunyikan
 // dari grouping status, tapi benar-benar tidak dihitung).
 //
-// Format: { SHEET: { columnLetter: "C", excludeIfContains: ["CO 2025", "ADDITIONAL CO"] } }
-// "excludeIfContains" dicocokkan secara case-insensitive & partial (substring).
+// Setiap sheet bisa punya BEBERAPA rule sekaligus (dijalankan berurutan,
+// digabung dengan logika AND — baris harus lolos SEMUA rule biar tetap
+// dihitung). Ada 2 jenis mode:
+//
+// - "excludeIfContains"     : baris DIBUANG kalau nilai kolom itu
+//                              mengandung salah satu dari `values`.
+// - "includeOnlyIfContains" : baris HANYA DIPERTAHANKAN kalau nilai kolom
+//                              itu mengandung salah satu dari `values`
+//                              (baris lain dibuang). Dipakai misalnya untuk
+//                              MBB yang cuma mau menghitung baris kolom B
+//                              berisi "TIF".
+//
+// Pencocokan "contains" selalu case-insensitive & partial (substring).
 // ============================================================
-const ROW_EXCLUSION_RULES = {
-  HEM: {
-    columnLetter: "C",
-    excludeIfContains: ["CO 2025", "ADDITIONAL CO"]
-  },
-  MBB: {
-    columnLetter: "U",
-    excludeIfContains: ["0.3 Drop MoM"]
-  },
-  FBB: {
-    columnLetter: "BU",
-    excludeIfContains: ["C.Tel.55/TK 000/JIFC-2Z50000/2026"]
-  },
-  QE: {
-    columnLetter: "J",
-    excludeIfContains: ["0.SPMK TELKOM"]
-  }
+const ROW_FILTER_RULES = {
+  MBB: [
+    { columnLetter: "B", mode: "includeOnlyIfContains", values: ["TIF"] },
+    { columnLetter: "U", mode: "excludeIfContains", values: ["0.3 Drop MoM"] },
+  ],
+  OLO: [
+    { columnLetter: "Q", mode: "excludeIfContains", values: ["00.3 Drop MOM"] },
+  ],
+  HEM: [
+    { columnLetter: "B", mode: "excludeIfContains", values: ["CO 2025", "ADDITIONAL CO"] },
+  ],
+  FBB: [
+    { columnLetter: "BU", mode: "excludeIfContains", values: ["C.Tel.55/TK 000/JIFC-2Z50000/2026"] },
+  ],
+  QE: [
+    { columnLetter: "J", mode: "excludeIfContains", values: ["0.SPMK TELKOM"] },
+  ],
 };
 
 // Cek apakah satu baris (objek hasil parsing, dengan `headers` array
-// berurutan sesuai posisi asli) harus DIBUANG berdasarkan ROW_EXCLUSION_RULES.
+// berurutan sesuai posisi asli) harus DIBUANG berdasarkan ROW_FILTER_RULES.
 function shouldExcludeRow(sheetName, row, headers) {
-  const rule = ROW_EXCLUSION_RULES[sheetName];
-  if (!rule) return false;
-
-  const statusLetter = STATUS_COLUMN_LETTER[sheetName];
-  if (sheetName === "QE" && statusLetter) {
-    const statusIdx = colLetterToIndex(statusLetter);
-    if (statusIdx >= 0 && statusIdx < headers.length) {
-      const statusHeader = headers[statusIdx];
-      const statusVal = normalizeKey(row[statusHeader]);
-      if (!statusVal) return true;
+  // Aturan khusus QE (sudah ada sebelumnya): baris dengan kolom status
+  // kosong dibuang, terlepas dari rule lain.
+  if (sheetName === "QE") {
+    const statusLetter = STATUS_COLUMN_LETTER[sheetName];
+    if (statusLetter) {
+      const statusIdx = colLetterToIndex(statusLetter);
+      if (statusIdx >= 0 && statusIdx < headers.length) {
+        const statusHeader = headers[statusIdx];
+        const statusVal = normalizeKey(row[statusHeader]);
+        if (!statusVal) return true;
+      }
     }
   }
 
-  const idx = colLetterToIndex(rule.columnLetter);
-  if (idx < 0 || idx >= headers.length) return false;
+  const rules = ROW_FILTER_RULES[sheetName];
+  if (!rules || rules.length === 0) return false;
 
-  const colName = headers[idx];
-  const rawValue = row[colName];
-  const val = normalizeKey(rawValue);
-  if (!val) return false;
+  for (const rule of rules) {
+    const idx = colLetterToIndex(rule.columnLetter);
+    if (idx < 0 || idx >= headers.length) continue; // kolom tidak ada, lewati rule ini
 
-  return rule.excludeIfContains.some((needle) => val.includes(normalizeKey(needle)));
+    const colName = headers[idx];
+    const val = normalizeKey(row[colName]);
+
+    if (rule.mode === "excludeIfContains") {
+      if (val && rule.values.some((needle) => val.includes(normalizeKey(needle)))) {
+        return true; // buang
+      }
+    } else if (rule.mode === "includeOnlyIfContains") {
+      const matches = val && rule.values.some((needle) => val.includes(normalizeKey(needle)));
+      if (!matches) return true; // tidak cocok syarat wajib -> buang
+    }
+  }
+
+  return false;
 }
 
 // Konversi huruf kolom spreadsheet (A, B, ..., Z, AA, AB, ...) ke index
@@ -144,6 +168,11 @@ const GROUP_ORDER = [
   "15. OA (JT)",
   "16. OA (PT1)",
   "TESTCOM/GOLIVE",
+  "00.1 Need Confirm",
+  "00.2 Confirmed Batal",
+  "00. Plan Drop",
+  "01. Drop",
+  "10. UT",
   "Kendala/DROP",
 ];
 
@@ -222,9 +251,30 @@ const STATUS_GROUPS = {
       "0.1 Need Confirm by Tsel",
       "0.2 Confirmed Batal by Tsel",
     ],
-    OLO: ["00.1 Need Confirm", "10. UT", "00.2 Confirmed Batal", "01. Drop", "00. Plan Drop", "00.3 Drop MOM"],
+    // "00.3 Drop MOM" untuk OLO sudah dibuang total dari data lewat
+    // ROW_FILTER_RULES (lihat di atas), jadi baris dengan status ini
+    // seharusnya tidak pernah sampai ke sini. Tetap dicantumkan sebagai
+    // jaring pengaman kalau suatu saat rule exclude-nya tidak match.
+    OLO: ["00.3 Drop MOM"],
     QE: ["0.DROP"],
     HEM: ["18. PLAN DROP", "19. READY PT1", "20. DROP"],
+  },
+  // Status OLO berikut sebelumnya digabung jadi satu ke "Kendala/DROP".
+  // Sekarang dipisah masing-masing jadi kategori/status sendiri.
+  "01. Drop": {
+    OLO: ["01. Drop"],
+  },
+  "00. Plan Drop": {
+    OLO: ["00. Plan Drop"],
+  },
+  "00.1 Need Confirm": {
+    OLO: ["00.1 Need Confirm"],
+  },
+  "00.2 Confirmed Batal": {
+    OLO: ["00.2 Confirmed Batal"],
+  },
+  "10. UT": {
+    OLO: ["10. UT"],
   },
 };
 
@@ -944,7 +994,7 @@ app.get("/api/debug/:sheet", async (req, res) => {
       totalRowsFetched: rows.length,
       totalRowsBeforeExclusion: cache.rawCount[sheetName],
       excludedRowsCount: (cache.rawCount[sheetName] || 0) - rows.length,
-      exclusionRuleApplied: ROW_EXCLUSION_RULES[sheetName] || null,
+      exclusionRuleApplied: ROW_FILTER_RULES[sheetName] || null,
       totalRawCsvRows: cache.totalRawRows[sheetName],
       headerRowIndexUsed: cache.headerIdx[sheetName],
       headerRowContent: cache.totalRawRows[sheetName] != null ? headers : null,
@@ -969,12 +1019,13 @@ app.get("/api/debug/:sheet", async (req, res) => {
 // Quick HEM-specific debug: total rows and how many are CO / ADDITIONAL CO
 app.get("/api/hem-debug", async (req, res) => {
   try {
-    const rows = await getSheetData("HEM");
+    const rows = await getSheetData("HEM"); // sudah difilter (exclusion diterapkan)
+    const rawRows = (await fetchSheetCSV("HEM")).records; // sebelum difilter
     const headers = await getSheetHeaders("HEM");
-    const colCName = headers[2] || null; // kolom C -> index 2
+    const colBName = headers[1] || null; // kolom B -> index 1
     let coCount = 0;
-    rows.forEach((r) => {
-      const v = String(colCName ? r[colCName] : "").trim();
+    rawRows.forEach((r) => {
+      const v = String(colBName ? r[colBName] : "").trim();
       const norm = normalizeKey(v);
       if (
         norm.includes(normalizeKey("CO 2025")) ||
@@ -986,10 +1037,11 @@ app.get("/api/hem-debug", async (req, res) => {
 
     res.json({
       sheet: "HEM",
-      totalRows: rows.length,
-      colCName,
+      totalRowsBeforeFilter: rawRows.length,
+      totalRowsAfterFilter: rows.length,
+      colBName,
       coCount,
-      nonCoCount: rows.length - coCount,
+      nonCoCount: rawRows.length - coCount,
       sampleHeaders: headers.slice(0, 12),
     });
   } catch (err) {
@@ -1001,4 +1053,4 @@ app.get("/health", (req, res) => res.json({ status: "ok" }));
 
 app.listen(PORT, () => {
   console.log(`Server berjalan di port ${PORT}`);
-}); 
+});
