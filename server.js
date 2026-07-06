@@ -1016,7 +1016,70 @@ app.get("/api/debug/:sheet", async (req, res) => {
   }
 });
 
-// Quick HEM-specific debug: total rows and how many are CO / ADDITIONAL CO
+// Debug MENTAH: cek apakah ada baris yang JUMLAH KOLOMNYA tidak sama dengan
+// jumlah header (indikasi CSV kegeser gara-gara tanda kutip nyasar di sel
+// teks panjang seperti RESUME/catatan). Ini baca langsung dari array hasil
+// parse CSV, BUKAN dari objek yang sudah dipetakan by name, supaya kelihatan
+// kalau ada pergeseran kolom yang "disembunyikan" oleh proses mapping biasa.
+app.get("/api/debug-raw/:sheet", async (req, res) => {
+  const sheetName = req.params.sheet.toUpperCase();
+  if (!SHEET_NAMES.includes(sheetName)) {
+    return res.status(404).json({ error: `Sheet "${sheetName}" tidak dikenal.` });
+  }
+  try {
+    const tabName = resolveSheetTabName(sheetName);
+    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(
+      tabName
+    )}`;
+    const r = await fetch(url, { redirect: "follow" });
+    const csvText = await r.text();
+    const rawRows = parse(csvText, {
+      skip_empty_lines: false,
+      relax_column_count: true,
+      trim: true,
+    });
+
+    const letter = STATUS_COLUMN_LETTER[sheetName];
+    const expectedLetterIndex = letter ? colLetterToIndex(letter) : -1;
+    const headerIdx = detectHeaderRowIndex(rawRows, STATUS_COLUMN[sheetName], expectedLetterIndex);
+    const headerRow = rawRows[headerIdx];
+    const expectedLen = headerRow.length;
+    const dataRows = rawRows.slice(headerIdx + 1).filter((r) => r.some((c) => String(c ?? "").trim() !== ""));
+
+    // Hitung berapa baris yang panjangnya BEDA dari header (indikasi kegeser)
+    const mismatchedRows = [];
+    dataRows.forEach((r, i) => {
+      if (r.length !== expectedLen) {
+        mismatchedRows.push({ rowIndex: i, length: r.length, expectedLen, valueAtStatusIdx: expectedLetterIndex >= 0 ? r[expectedLetterIndex] : null });
+      }
+    });
+
+    // Ambil 20 sample nilai MENTAH langsung dari index kolom status (array,
+    // bukan objek), supaya kelihatan asli tanpa proses mapping apapun.
+    const rawStatusSamples = dataRows.slice(0, 20).map((r, i) => ({
+      rowIndex: i,
+      rowLength: r.length,
+      valueAtStatusIdx: expectedLetterIndex >= 0 ? r[expectedLetterIndex] : null,
+    }));
+
+    res.json({
+      sheet: sheetName,
+      headerIdx,
+      expectedLen,
+      totalDataRows: dataRows.length,
+      statusColumnLetter: letter,
+      statusColumnLetterIndex: expectedLetterIndex,
+      headerAtStatusIdx: headerRow[expectedLetterIndex],
+      mismatchedRowsCount: mismatchedRows.length,
+      mismatchedRowsSample: mismatchedRows.slice(0, 10),
+      rawStatusSamples,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 app.get("/api/hem-debug", async (req, res) => {
   try {
     const rows = await getSheetData("HEM"); // sudah difilter (exclusion diterapkan)
