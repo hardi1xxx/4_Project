@@ -330,6 +330,16 @@
     font-size: 13px;
   }
   .summary-card .breakdown-list li:last-child { border-bottom: none; }
+  .summary-card .breakdown-list li.clickable-status {
+    cursor: pointer;
+    border-radius: 8px;
+    margin: 0 -6px;
+    padding: 6px 6px;
+    transition: background .12s ease;
+  }
+  .summary-card .breakdown-list li.clickable-status:hover {
+    background: var(--panel-soft);
+  }
   .summary-card .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
   .summary-card .breakdown-list .name { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .summary-card .breakdown-list .cnt { font-weight: 700; color: var(--text); }
@@ -1118,60 +1128,59 @@ function showRowDetails(row, column) {
   );
 }
 
-function openStatusDetails(status, count, sheet) {
-  const actions = [];
-  if (currentStatusColumn) {
-    actions.push({
-      label: `Lihat semua baris terkait ${currentStatusColumn}`,
-      className: "primary",
-      onClick: () => {
-        closeModal();
-        switchTab(sheet, () => applyFilterAndLoad(currentStatusColumn, status));
-      },
-    });
-  }
-  actions.push({ label: "Tutup", className: "", onClick: closeModal });
-  const previewRows = currentSheet === sheet ? getMatchingRows(currentStatusColumn, status, RELATED_PREVIEW_LIMIT) : [];
-  const allRows = currentSheet === sheet ? getAllMatchingRows(currentStatusColumn, status) : [];
-  const listContent = previewRows.length > 0
-    ? `<div style="margin-top:16px;"><strong>Contoh baris dengan ${escapeHtml(currentStatusColumn)} = ${escapeHtml(status)}:</strong>${renderRowsAsTable(currentColumns, previewRows)}${allRows.length > RELATED_PREVIEW_LIMIT ? `<div style="margin-top:8px;color:var(--muted);font-size:12px;">Menampilkan ${RELATED_PREVIEW_LIMIT} dari ${allRows.length} baris terkait.</div>` : ""}</div>`
-    : `<div style="margin-top:16px;color:var(--muted);">Buka sheet ${escapeHtml(sheet)} untuk melihat baris terkait.</div>`;
-  if (allRows.length > RELATED_PREVIEW_LIMIT) {
-    actions.push({
-      label: "Tampilkan semua baris terkait",
-      className: "",
-      onClick: () => {
-        prepareModalRowsPagination(allRows, currentColumns, `<p>Ini adalah ringkasan status untuk sheet <strong>${escapeHtml(sheet)}</strong>.</p><p>Semua baris dengan ${escapeHtml(currentStatusColumn)} = ${escapeHtml(status)}:</p>`);
-      },
-    });
-  }
+async function openStatusDetails(status, count, sheet) {
+  // Tampilkan modal loading dulu (fetch ke server butuh waktu)
   openModal(
     `Status: ${status}`,
     `Sheet: ${sheet} · ${count} baris`,
-    `<p>Ini adalah ringkasan status untuk sheet <strong>${escapeHtml(sheet)}</strong>.</p><p>Gunakan tombol di bawah untuk menampilkan baris data terkait.</p>${listContent}`,
-    actions
+    `<div class="loading">Memuat baris untuk status ini...</div>`,
+    [{ label: "Tutup", className: "", onClick: closeModal }]
   );
+
+  try {
+    // PENTING: filter lewat statusGroup (bukan exact-match nilai mentah di
+    // browser), supaya baris yang tampil PERSIS sama dengan definisi grup
+    // yang menghasilkan angka breakdown ini — 1 grup status bisa mewakili
+    // beberapa nilai mentah berbeda, dan tidak boleh tercampur dengan grup
+    // status lain.
+    const res = await fetch(`/api/data/${sheet}?statusGroup=${encodeURIComponent(status)}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+
+    const rows = json.rows || [];
+    const columns = json.columns && json.columns.length > 0 ? json.columns : currentColumns;
+
+    const actions = [{ label: "Tutup", className: "", onClick: closeModal }];
+    const header = `<p>Baris dengan status <strong>${escapeHtml(status)}</strong> di sheet <strong>${escapeHtml(sheet)}</strong> (${rows.length} baris):</p>`;
+    prepareModalRowsPagination(rows, columns, header);
+    // prepareModalRowsPagination sudah update modalContent; tapi title/meta &
+    // actions dari openModal di atas tetap dipakai, jadi cukup panggil ulang
+    // openModal sekali lagi untuk pasang actions & meta yang final.
+    document.getElementById("modalMeta").textContent = `Sheet: ${sheet} · ${rows.length} baris`;
+    const actionsEl = document.getElementById("modalActions");
+    actionsEl.innerHTML = "";
+    actions.forEach((action) => {
+      const btn = document.createElement("button");
+      btn.textContent = action.label;
+      btn.className = action.className || "primary";
+      btn.onclick = action.onClick;
+      actionsEl.appendChild(btn);
+    });
+  } catch (err) {
+    openModal(
+      `Status: ${status}`,
+      `Sheet: ${sheet}`,
+      `<div class="error">⚠️ Gagal memuat baris: ${escapeHtml(err.message)}</div>`,
+      [{ label: "Tutup", className: "", onClick: closeModal }]
+    );
+  }
 }
 
 function openSummarySheetDetails(sheet, stats) {
   const breakdownItems = (stats.breakdown || []).map((item) => {
     return `<li style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;"><span>${escapeHtml(item.status)}</span><span>${item.count}</span></li>`;
   }).join("");
-  const rows = currentSheet === sheet && stats.statusColumn ? getMatchingRows(stats.statusColumn, stats.breakdown?.[0]?.status || "", RELATED_PREVIEW_LIMIT) : [];
-  const allRows = currentSheet === sheet && stats.statusColumn ? getAllMatchingRows(stats.statusColumn, stats.breakdown?.[0]?.status || "") : [];
-  const rowPreview = rows.length > 0
-    ? `<div style="margin-top:16px;"><strong>Contoh baris di sheet ${escapeHtml(sheet)}:</strong>${renderRowsAsTable(currentColumns, rows)}${allRows.length > RELATED_PREVIEW_LIMIT ? `<div style="margin-top:8px;color:var(--muted);font-size:12px;">Menampilkan ${RELATED_PREVIEW_LIMIT} dari ${allRows.length} baris terkait.</div>` : ""}</div>`
-    : `<div style="margin-top:16px;color:var(--muted);">Buka sheet ${escapeHtml(sheet)} untuk melihat contoh baris terkait.</div>`;
   const actions = [];
-  if (allRows.length > RELATED_PREVIEW_LIMIT) {
-    actions.push({
-      label: "Tampilkan semua baris terkait",
-      className: "",
-      onClick: () => {
-        prepareModalRowsPagination(allRows, currentColumns, `<p>Kolom status: <strong>${escapeHtml(stats.statusColumn || "-")}</strong></p><ul style="list-style:none;padding:0;margin:0;">${breakdownItems}</ul><div style="margin-top:16px;"><strong>Semua baris di sheet ${escapeHtml(sheet)}:</strong></div>`);
-      },
-    });
-  }
   actions.push({
     label: `Lihat semua baris terkait di ${sheet}`,
     className: "primary",
@@ -1185,7 +1194,7 @@ function openSummarySheetDetails(sheet, stats) {
   openModal(
     `Ringkasan ${sheet}`,
     `Total: ${stats.total} baris`,
-    `<p>Kolom status: <strong>${escapeHtml(stats.statusColumn || "-")}</strong></p><ul style="list-style:none;padding:0;margin:0;">${breakdownItems}</ul>${rowPreview}`,
+    `<p>Kolom status: <strong>${escapeHtml(stats.statusColumn || "-")}</strong></p><ul style="list-style:none;padding:0;margin:0;">${breakdownItems}</ul><p style="margin-top:12px;color:var(--muted);font-size:12.5px;">Tip: klik salah satu status di kartu ringkasan untuk lihat baris-barisnya saja.</p>`,
     actions
   );
 }
@@ -1219,6 +1228,22 @@ function getGroupCount(breakdown, groupName) {
   return found ? found.count : 0;
 }
 
+// Beberapa sheet punya lebih dari satu grup status yang sebenarnya sama-sama
+// berarti "sudah Testcom/Golive" secara operasional, walau nama grupnya beda
+// di data mentah. Supaya kartu ringkasan (kotak "Testcom") menghitung semua
+// itu sebagai satu angka, daftar grup per sheet diatur di sini. Sheet yang
+// tidak disebutkan di sini otomatis pakai default: cuma "TESTCOM/GOLIVE".
+const TESTCOM_GROUPS_BY_SHEET = {
+  MBB: ["7. L3. OA Confirmation", "TESTCOM/GOLIVE"],
+  OLO: ["15. OA (JT)", "TESTCOM/GOLIVE"],
+};
+const DEFAULT_TESTCOM_GROUPS = ["TESTCOM/GOLIVE"];
+
+function getTestcomCount(sheetName, breakdown) {
+  const groups = TESTCOM_GROUPS_BY_SHEET[sheetName] || DEFAULT_TESTCOM_GROUPS;
+  return groups.reduce((sum, g) => sum + getGroupCount(breakdown, g), 0);
+}
+
 function renderSummary(statsAll, fromCache) {
   // Hitung per-sheet: testcom, drop, progress (sisa di luar testcom & drop)
   const perSheetCalc = {};
@@ -1233,7 +1258,7 @@ function renderSummary(statsAll, fromCache) {
       perSheetCalc[s] = { total: 0, testcom: 0, drop: 0, progress: 0, error: d ? d.error : "Data tidak tersedia" };
       return;
     }
-    const testcom = getGroupCount(d.breakdown, "TESTCOM/GOLIVE");
+    const testcom = getTestcomCount(s, d.breakdown);
     const drop = getGroupCount(d.breakdown, "Kendala/DROP");
     const progress = Math.max(0, d.total - testcom - drop);
 
@@ -1293,7 +1318,7 @@ function renderSummary(statsAll, fromCache) {
     const itemsHtml = topItems.map((item, i) => {
       const pct = d.total > 0 ? ((item.count / d.total) * 100).toFixed(1) : "0.0";
       const color = PALETTE[i % PALETTE.length];
-      return `<li>
+      return `<li class="clickable-status" data-sheet="${escapeHtml(sheetName)}" data-status="${escapeHtml(item.status)}" data-count="${item.count}" title="Klik untuk lihat baris ${escapeHtml(item.status)} saja">
         <span class="dot" style="background:${color}"></span>
         <span class="name" title="${escapeHtml(item.status)}">${escapeHtml(item.status)}</span>
         <span class="cnt">${item.count}</span>
@@ -1344,7 +1369,10 @@ function renderSummary(statsAll, fromCache) {
       </ul>
     `;
     card.style.cursor = "pointer";
-    card.onclick = () => openSummarySheetDetails(sheetName, d);
+    card.onclick = (e) => {
+      if (e.target.closest(".clickable-status")) return; // biar tidak bentrok dengan klik status
+      openSummarySheetDetails(sheetName, d);
+    };
     summaryGridEl.appendChild(card);
   });
 }
@@ -1448,6 +1476,12 @@ tableArea.addEventListener("click", (e) => {
   if (!Number.isFinite(rowIndex)) return;
   const row = currentRows[rowIndex];
   showRowDetails(row, span.dataset.col);
+});
+summaryGridEl.addEventListener("click", (e) => {
+  const li = e.target.closest(".clickable-status");
+  if (!li) return;
+  e.stopPropagation();
+  openStatusDetails(li.dataset.status, Number(li.dataset.count) || 0, li.dataset.sheet);
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeModal();

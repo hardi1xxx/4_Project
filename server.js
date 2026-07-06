@@ -792,6 +792,21 @@ app.get("/api/data/:sheet", async (req, res) => {
       );
     }
 
+    // Filter berdasarkan GRUP status (dipakai waktu klik salah satu baris
+    // breakdown di kartu ringkasan) — cocokkan pakai logika grouping yang
+    // SAMA PERSIS dengan yang menghasilkan angka breakdown (getStatusGroup),
+    // supaya jumlah baris yang tampil selalu konsisten dengan angka di kartu.
+    // Ini beda dari filter_<Kolom> biasa: filter_ cocokkan NILAI MENTAH persis,
+    // sedangkan statusGroup cocokkan lewat pemetaan grup (1 grup bisa mewakili
+    // beberapa nilai mentah berbeda).
+    const statusGroup = (req.query.statusGroup || "").trim();
+    if (statusGroup) {
+      const statusCol = STATUS_COLUMN[sheetName];
+      const headers = await getSheetHeaders(sheetName);
+      const resolvedCol = resolveStatusColumn(sheetName, rows, statusCol, headers);
+      rows = rows.filter((row) => getStatusGroup(sheetName, row[resolvedCol]) === statusGroup);
+    }
+
     // Filter per kolom (checkbox, bisa pilih lebih dari 1 nilai sekaligus):
     // filter_<NamaKolom>=nilai1,nilai2,nilai3 -> baris cocok kalau nilainya
     // ADA SALAH SATU dari nilai yang dipilih (logika OR antar nilai dalam 1
