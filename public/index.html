@@ -336,6 +336,39 @@
   .summary-card .breakdown-list .pct { color: var(--muted); font-size: 11.5px; min-width: 42px; text-align: right; }
   .summary-card .err { color: var(--red); font-size: 13px; }
 
+  .mini-stats-row {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .mini-stat {
+    min-width: 0;
+    padding: 8px 8px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel-soft);
+    overflow: hidden;
+  }
+  .mini-stat-label {
+    font-size: 10.5px;
+    color: var(--muted);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mini-stat-val {
+    font-size: 14px;
+    font-weight: 900;
+    margin-top: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .summary-title-pill {
     display: inline-flex;
     align-items: center;
@@ -1243,6 +1276,7 @@ function renderSummary(statsAll, fromCache) {
   summaryGridEl.innerHTML = "";
   SHEETS.forEach((sheetName) => {
     const d = statsAll[sheetName];
+    const calc = perSheetCalc[sheetName]; // { total, testcom, drop, progress, error }
     const card = document.createElement("div");
     card.className = "summary-card";
 
@@ -1267,9 +1301,9 @@ function renderSummary(statsAll, fromCache) {
       </li>`;
     }).join("");
 
-    const kTest = d.total ? Math.round((d.testcom / d.total) * 100) : 0;
-    const kDrop = d.total ? Math.round((d.drop / d.total) * 100) : 0;
-    const kProg = d.total ? Math.max(0, 100 - kTest - kDrop) : 0;
+    const kTest = calc.total ? Math.round((calc.testcom / calc.total) * 100) : 0;
+    const kDrop = calc.total ? Math.round((calc.drop / calc.total) * 100) : 0;
+    const kProg = calc.total ? Math.max(0, 100 - kTest - kDrop) : 0;
 
     card.innerHTML = `
       <h3>
@@ -1289,18 +1323,18 @@ function renderSummary(statsAll, fromCache) {
         <div class="kpi-bar" aria-label="KPI ringkas">
           <span style="width:${kTest}%;"></span>
         </div>
-        <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-          <div style="padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--panel-soft);">
-            <div style="font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;">Testcom</div>
-            <div style="font-size:14px;font-weight:900;color:var(--green);margin-top:4px;">${d.testcom}</div>
+        <div class="mini-stats-row">
+          <div class="mini-stat">
+            <div class="mini-stat-label">Progress</div>
+            <div class="mini-stat-val" style="color:var(--accent);">${calc.progress}</div>
           </div>
-          <div style="padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--panel-soft);">
-            <div style="font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;">Drop</div>
-            <div style="font-size:14px;font-weight:900;color:var(--red);margin-top:4px;">${d.drop}</div>
+          <div class="mini-stat">
+            <div class="mini-stat-label">Testcom</div>
+            <div class="mini-stat-val" style="color:var(--green);">${calc.testcom}</div>
           </div>
-          <div style="padding:8px 10px;border:1px solid var(--border);border-radius:12px;background:var(--panel-soft);">
-            <div style="font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;">Progress</div>
-            <div style="font-size:14px;font-weight:900;color:var(--accent);margin-top:4px;">${d.progress}</div>
+          <div class="mini-stat">
+            <div class="mini-stat-label">Drop</div>
+            <div class="mini-stat-val" style="color:var(--red);">${calc.drop}</div>
           </div>
         </div>
       </div>
