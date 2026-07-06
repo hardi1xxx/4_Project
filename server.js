@@ -40,8 +40,6 @@ const STATUS_COLUMN = {
   QE: "STATUS FISIK",
 };
 
-const APPLY_ROW_EXCLUSION = false; // nonaktifkan filter row khusus agar jumlah total mengikuti Google Sheet mentah
-
 // ============================================================
 // KOLOM STATUS BERDASARKAN POSISI (HURUF KOLOM) — sesuai konfirmasi user
 // Ini cara paling PASTI untuk ambil kolom status yang benar, karena tidak
@@ -89,8 +87,6 @@ const ROW_EXCLUSION_RULES = {
 // Cek apakah satu baris (objek hasil parsing, dengan `headers` array
 // berurutan sesuai posisi asli) harus DIBUANG berdasarkan ROW_EXCLUSION_RULES.
 function shouldExcludeRow(sheetName, row, headers) {
-  if (!APPLY_ROW_EXCLUSION) return false;
-
   const rule = ROW_EXCLUSION_RULES[sheetName];
   if (!rule) return false;
 
@@ -372,9 +368,9 @@ const cache = {
   totalRawRows: {},  // { MBB: total baris mentah di CSV (termasuk header & baris kosong), ... }
   lastFetch: {} // { MBB: timestamp, ... }
 };
-// Refresh setiap 1 menit — data di-cache di server sementara, untuk menjaga
-// angka tetap lebih dekat ke Google Sheet yang sedang berubah.
-const CACHE_TTL_MS = 60 * 1000; // 1 menit
+// Refresh setiap 1 jam — data di-cache di server selama ini, dan frontend
+// juga auto-reload mengikuti interval yang sama (lihat index.html).
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
 
 // ============================================================
 // FUNGSI AMBIL DATA DARI GOOGLE SHEETS (CSV export per-sheet)
