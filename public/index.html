@@ -541,6 +541,157 @@
     color: var(--accent);
   }
   .clickable-cell:hover { text-decoration: underline; }
+
+  /* ============================================================
+     MBB TREE DIAGRAM PROGRESS — halaman khusus MBB
+     ============================================================ */
+  #mbbTreeView { margin: 6px 0 26px; }
+  .mbb-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .mbb-heading h2 { margin: 0; font-size: 19px; font-weight: 800; }
+  .mbb-heading .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .mbb-cols-note { font-size: 11px; color: var(--muted); }
+
+  .mbb-top-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr) 1.4fr;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 1200px) { .mbb-top-row { grid-template-columns: repeat(2, 1fr); } }
+  .mbb-fin-card {
+    background: linear-gradient(160deg, #fff, var(--panel-soft));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    text-align: center;
+  }
+  .mbb-fin-card .label { font-size: 11.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+  .mbb-fin-card .val { font-size: 26px; font-weight: 900; color: var(--accent); margin-top: 6px; }
+  .mbb-fin-card .foot { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .mbb-target-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .mbb-target-card h4 { margin: 0 0 8px; font-size: 13px; font-weight: 800; }
+  .mbb-donut-wrap { position: relative; width: 92px; height: 92px; flex-shrink: 0; }
+  .mbb-donut-wrap canvas { width: 100% !important; height: 100% !important; }
+  .mbb-donut-pct {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; font-weight: 900; color: var(--text);
+  }
+  .mbb-target-stats { display: flex; gap: 14px; flex-wrap: wrap; }
+  .mbb-target-stats .item .l { font-size: 10.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; }
+  .mbb-target-stats .item .v { font-size: 18px; font-weight: 800; }
+
+  .mbb-main-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1.05fr 1fr;
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 1100px) { .mbb-main-grid { grid-template-columns: 1fr; } }
+
+  .mbb-panel {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    box-shadow: var(--shadow-sm);
+  }
+  .mbb-panel h3 { margin: 0 0 12px; font-size: 13.5px; font-weight: 800; }
+  .mbb-panel + .mbb-panel { margin-top: 14px; }
+
+  /* --- Tree diagram (kiri) --- */
+  .tree-root-node {
+    display: inline-block;
+    background: #1e3a5f;
+    color: #fff;
+    font-weight: 800;
+    font-size: 12.5px;
+    border-radius: 10px;
+    padding: 10px 14px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .tree-root-node b { display: block; font-size: 20px; margin-top: 2px; }
+  .tree-branch-grid { display: flex; gap: 14px; }
+  .tree-main-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 118px; }
+  .tree-sub-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    border-left: 2px solid var(--border);
+    padding-left: 12px;
+  }
+  .tree-node {
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #1e3a5f;
+    background: #dbeafe;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+  }
+  .tree-node b { font-size: 14px; }
+  .tree-node.l1onair { background: #dcfce7; color: #15803d; }
+  .tree-node.nyonair { background: #dbeafe; color: #1d4ed8; }
+  .tree-node.drop { background: #fee2e2; color: #b91c1c; }
+  .tree-sub-col .tree-node {
+    position: relative;
+    background: var(--panel-soft);
+    color: var(--text);
+  }
+  .tree-sub-col .tree-node:before {
+    content: "";
+    position: absolute;
+    left: -12px;
+    top: 50%;
+    width: 12px;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* --- Panel kanan (versi lain + RFI flow) --- */
+  .status-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .status-list .tree-node { background: #dcfce7; color: #166534; }
+  .rfi-flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .rfi-flow .tree-node { flex: 1; min-width: 70px; text-align: center; justify-content: center; flex-direction: column; background: #fef3c7; color: #92400e; }
+  .rfi-flow .arrow { color: var(--muted); font-weight: 900; }
+
+  .mbb-empty-note { font-size: 12px; color: var(--muted); padding: 10px 0; }
+
+  /* --- Tabel pivot region --- */
+  .mbb-pivot-wrap { overflow: auto; border: 1px solid var(--border); border-radius: 14px; background: #fff; box-shadow: var(--shadow-sm); }
+  table.mbb-pivot { border-collapse: collapse; width: 100%; font-size: 12px; white-space: nowrap; }
+  table.mbb-pivot th, table.mbb-pivot td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  table.mbb-pivot th:first-child, table.mbb-pivot td:first-child { text-align: left; position: sticky; left: 0; background: #fff; }
+  table.mbb-pivot thead th { position: sticky; top: 0; background: #1e3a5f; color: #fff; font-weight: 700; z-index: 1; }
+  table.mbb-pivot thead th:first-child { z-index: 2; }
+  table.mbb-pivot tbody tr:nth-child(even) { background: rgba(37,99,235,0.03); }
+  table.mbb-pivot tbody tr:last-child { font-weight: 800; background: var(--accent-soft) !important; }
+  table.mbb-pivot tbody tr:last-child td:first-child { background: var(--accent-soft); }
+  table.mbb-pivot td.zero { color: #cbd5e1; }
 </style>
 </head>
 <body>
@@ -594,6 +745,50 @@
   </div>
 
   <div class="content" id="sheetContent">
+
+    <div id="mbbTreeView" style="display:none;">
+      <div class="mbb-heading">
+        <div>
+          <h2>🌳 Tree Diagram Progress</h2>
+          <div class="sub" id="mbbHeadingSub">Node-B TIF — AREA II</div>
+        </div>
+        <div class="mbb-cols-note" id="mbbColsNote"></div>
+      </div>
+
+      <div class="mbb-top-row" id="mbbTopRow"></div>
+
+      <div class="mbb-main-grid">
+        <div class="mbb-panel" id="mbbTreePanel">
+          <h3>Tree Diagram Progress</h3>
+          <div id="mbbTreeContent"></div>
+        </div>
+
+        <div>
+          <div class="mbb-panel">
+            <h3>Resume &amp; Issue Analytics — List L0 Ready Issue BTS per Region</h3>
+            <div class="chart-wrap" style="height:210px;"><canvas id="mbbIssueChart"></canvas></div>
+          </div>
+          <div class="mbb-panel">
+            <h3>Resume L0 Ready per Region</h3>
+            <div class="chart-wrap" style="height:210px;"><canvas id="mbbL0ReadyChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="mbb-panel">
+          <h3>Status Pekerjaan — Versi Ringkas</h3>
+          <div class="status-list" id="mbbStatusList"></div>
+          <h3>RFI Flow</h3>
+          <div class="rfi-flow" id="mbbRfiFlow"></div>
+        </div>
+      </div>
+
+      <div class="mbb-panel" style="margin-bottom:16px;">
+        <h3>Status Pekerjaan / Record Count per Region</h3>
+        <div class="mbb-pivot-wrap">
+          <table class="mbb-pivot" id="mbbPivotTable"></table>
+        </div>
+      </div>
+    </div>
 
     <div class="stats-grid" id="statsGrid"></div>
 
@@ -654,6 +849,12 @@ let pendingFilter = null;
 let barChartInstance = null;
 let donutChartInstance = null;
 let summaryCompareChartInstance = null;
+let mbbIssueChartInstance = null;
+let mbbL0ReadyChartInstance = null;
+let mbbJulyChartInstance = null;
+let mbbTreeLoaded = false;
+
+const mbbTreeViewEl = document.getElementById("mbbTreeView");
 
 const tabsEl = document.getElementById("tabs");
 const searchInput = document.getElementById("searchInput");
@@ -737,6 +938,12 @@ function switchTab(sheetOrSummary, deferredFilter = null) {
     summaryContentEl.style.display = "none";
     sheetContentEl.style.display = "block";
     loadAll(); // pakai cache kalau masih segar
+    if (currentSheet === "MBB") {
+      mbbTreeViewEl.style.display = "block";
+      loadMbbTree();
+    } else {
+      mbbTreeViewEl.style.display = "none";
+    }
   }
 }
 
@@ -951,6 +1158,220 @@ async function addFilter(column) {
   } catch (err) {
     console.error(err);
   }
+}
+
+// ============================================================
+// HALAMAN "TREE DIAGRAM PROGRESS" — KHUSUS MBB
+// ============================================================
+function formatMiliar(n) {
+  const v = (Number(n) || 0) / 1e9;
+  return v.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "B";
+}
+
+function friendlyStatusLabel(status) {
+  return String(status || "").replace(/^\d+(\.\d+)*\s*/, "").trim() || status;
+}
+
+async function loadMbbTree(forceRefresh = false) {
+  try {
+    const cached = cache.perSheet.MBB;
+    let json;
+    if (!forceRefresh && cached && cached.tree && isCacheFresh(cached.treeTs)) {
+      json = cached.tree;
+    } else {
+      const res = await fetch("/api/mbb-tree");
+      json = await res.json();
+      cache.perSheet.MBB = cache.perSheet.MBB || {};
+      cache.perSheet.MBB.tree = json;
+      cache.perSheet.MBB.treeTs = Date.now();
+    }
+    if (json.error) {
+      document.getElementById("mbbTreeContent").innerHTML = `<div class="error">⚠️ ${escapeHtml(json.error)}</div>`;
+      return;
+    }
+    renderMbbTree(json);
+    mbbTreeLoaded = true;
+  } catch (err) {
+    console.error("Gagal memuat data tree MBB:", err);
+    document.getElementById("mbbTreeContent").innerHTML = `<div class="error">⚠️ Gagal memuat data: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderMbbTree(data) {
+  document.getElementById("mbbHeadingSub").textContent =
+    `Total Site ID: ${data.total} · L1 On Air: ${data.onAir} · NY On Air: ${data.nyOnAir}`;
+  const cu = data.columnsUsed || {};
+  document.getElementById("mbbColsNote").textContent =
+    `Region: ${cu.region || "-"} · PO: ${cu.po || "-"} · BoQ: ${cu.boq || "-"} · Comcase: ${cu.comcase || "-"}`;
+
+  // ---- Baris atas: kartu keuangan + target Juli ----
+  const fin = data.finance || { po: 0, boq: 0, comcase: 0 };
+  const jt = data.julyTarget || { target: 0, actual: 0, pct: 0 };
+  document.getElementById("mbbTopRow").innerHTML = `
+    <div class="mbb-fin-card">
+      <div class="label">Nilai PO</div>
+      <div class="val">${formatMiliar(fin.po)}</div>
+      <div class="foot">Total kolom M</div>
+    </div>
+    <div class="mbb-fin-card">
+      <div class="label">Nilai BoQ</div>
+      <div class="val">${formatMiliar(fin.boq)}</div>
+      <div class="foot">Total kolom AH</div>
+    </div>
+    <div class="mbb-fin-card">
+      <div class="label">Nilai Comcase</div>
+      <div class="val">${formatMiliar(fin.comcase)}</div>
+      <div class="foot">Total kolom AJ</div>
+    </div>
+    <div class="mbb-target-card">
+      <div class="mbb-donut-wrap">
+        <canvas id="mbbJulyChart"></canvas>
+        <div class="mbb-donut-pct">${jt.pct}%</div>
+      </div>
+      <div>
+        <h4>Target Progress (Juli)</h4>
+        <div class="mbb-target-stats">
+          <div class="item"><div class="l">Target</div><div class="v">${jt.target}</div></div>
+          <div class="item"><div class="l">OA Confirmation</div><div class="v" style="color:var(--green)">${jt.actual}</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+  renderMbbJulyChart(jt);
+
+  // ---- Tree diagram kiri ----
+  const funnel = data.funnelBreakdown || [];
+  const subNodesHtml = funnel.map((item) => `
+    <div class="tree-node">
+      <span>${escapeHtml(friendlyStatusLabel(item.status))}</span>
+      <b>${item.count}</b>
+    </div>
+  `).join("");
+  document.getElementById("mbbTreeContent").innerHTML = `
+    <div class="tree-root-node">Site ID<b>${data.total}</b></div>
+    <div class="tree-branch-grid">
+      <div class="tree-main-col">
+        <div class="tree-node l1onair"><span>L1 - On Air</span><b>${data.onAir}</b></div>
+        <div class="tree-node nyonair"><span>NY On Air</span><b>${data.nyOnAir}</b></div>
+        <div class="tree-node drop"><span>Drop</span><b>${data.drop}</b></div>
+      </div>
+      <div class="tree-sub-col">
+        ${subNodesHtml || '<div class="mbb-empty-note">Tidak ada data</div>'}
+      </div>
+    </div>
+  `;
+
+  // ---- Panel kanan: versi ringkas + RFI flow ----
+  document.getElementById("mbbStatusList").innerHTML = funnel.map((item) => `
+    <div class="tree-node">
+      <span>${escapeHtml(friendlyStatusLabel(item.status))}</span>
+      <b>${item.count}</b>
+    </div>
+  `).join("") || '<div class="mbb-empty-note">Tidak ada data</div>';
+
+  document.getElementById("mbbRfiFlow").innerHTML = `
+    <div class="tree-node"><span>Site ID</span><b>${data.total}</b></div>
+    <span class="arrow">→</span>
+    <div class="tree-node"><span>NY RFI</span><b>${data.nyOnAir}</b></div>
+    <span class="arrow">→</span>
+    <div class="tree-node"><span>RFI</span><b>${data.onAir}</b></div>
+  `;
+
+  // ---- Grafik Resume & Issue Analytics (per region) ----
+  renderMbbBarChart("mbbIssueChart", "mbbIssueChartInstance", data.issueBTSByRegion || []);
+  renderMbbPieChart("mbbL0ReadyChart", data.l0ReadyByRegion || []);
+
+  // ---- Tabel pivot region ----
+  renderMbbPivotTable(data);
+}
+
+function renderMbbJulyChart(jt) {
+  if (typeof Chart === "undefined") return;
+  const canvas = document.getElementById("mbbJulyChart");
+  if (!canvas) return;
+  if (mbbJulyChartInstance) { mbbJulyChartInstance.destroy(); mbbJulyChartInstance = null; }
+  const pct = Math.max(0, Math.min(100, jt.pct || 0));
+  mbbJulyChartInstance = new Chart(canvas.getContext("2d"), {
+    type: "doughnut",
+    data: {
+      labels: ["Tercapai", "Sisa"],
+      datasets: [{ data: [pct, Math.max(0, 100 - pct)], backgroundColor: ["#2563eb", "#e2e8f0"], borderWidth: 0 }],
+    },
+    options: { responsive: true, maintainAspectRatio: false, cutout: "72%", plugins: { legend: { display: false }, tooltip: { enabled: false } } },
+  });
+}
+
+function renderMbbBarChart(canvasId, instanceVarNameIgnored, rows) {
+  if (typeof Chart === "undefined") return;
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (mbbIssueChartInstance) { mbbIssueChartInstance.destroy(); mbbIssueChartInstance = null; }
+  const top = rows.slice(0, 10);
+  mbbIssueChartInstance = new Chart(canvas.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: top.map((r) => r.region),
+      datasets: [{ label: "Issue BTS", data: top.map((r) => r.count), backgroundColor: "#2563eb", borderRadius: 5 }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: "#1e293b", font: { size: 10.5 } }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: "#64748b", precision: 0 }, grid: { color: "#eef2f7" } },
+      },
+    },
+  });
+}
+
+function renderMbbPieChart(canvasId, rows) {
+  if (typeof Chart === "undefined") return;
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (mbbL0ReadyChartInstance) { mbbL0ReadyChartInstance.destroy(); mbbL0ReadyChartInstance = null; }
+  const top = rows.slice(0, 8);
+  mbbL0ReadyChartInstance = new Chart(canvas.getContext("2d"), {
+    type: "pie",
+    data: {
+      labels: top.map((r) => r.region),
+      datasets: [{ data: top.map((r) => r.count), backgroundColor: PALETTE }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { position: "right", labels: { color: "#1e293b", boxWidth: 10, font: { size: 10.5 } } } },
+    },
+  });
+}
+
+function renderMbbPivotTable(data) {
+  const table = document.getElementById("mbbPivotTable");
+  const cols = data.statusOrder || [];
+  const regions = data.regions || [];
+
+  const theadCells = ["REGION", ...cols.map(friendlyStatusLabel), "Grand total"]
+    .map((c) => `<th>${escapeHtml(c)}</th>`).join("");
+
+  const grandTotals = cols.map(() => 0);
+  let grandAll = 0;
+
+  const bodyRows = regions.map((r) => {
+    const cells = cols.map((c, i) => {
+      const v = r.statuses[c] || 0;
+      grandTotals[i] += v;
+      return `<td class="${v === 0 ? "zero" : ""}">${v === 0 ? "-" : v}</td>`;
+    }).join("");
+    grandAll += r.total;
+    return `<tr><td>${escapeHtml(r.region)}</td>${cells}<td>${r.total}</td></tr>`;
+  }).join("");
+
+  const grandRow = `<tr><td>Grand total</td>${grandTotals.map((v) => `<td>${v}</td>`).join("")}<td>${grandAll}</td></tr>`;
+
+  table.innerHTML = `
+    <thead><tr>${theadCells}</tr></thead>
+    <tbody>${bodyRows || '<tr><td colspan="' + (cols.length + 2) + '">Tidak ada data</td></tr>'}${regions.length ? grandRow : ""}</tbody>
+  `;
 }
 
 function renderActiveFilters() {
@@ -1524,6 +1945,7 @@ document.getElementById("refreshBtn").onclick = () => {
     loadSummary(true);
   } else {
     loadAll(true);
+    if (currentSheet === "MBB") loadMbbTree(true);
   }
 };
 filterColumnSelect.onchange = () => {
@@ -1568,6 +1990,10 @@ if (currentSheet === SUMMARY_KEY) {
   loadSummary();
 } else {
   loadAll();
+  if (currentSheet === "MBB") {
+    mbbTreeViewEl.style.display = "block";
+    loadMbbTree();
+  }
 }
 
 setInterval(() => {
@@ -1575,6 +2001,7 @@ setInterval(() => {
     loadSummary(true);
   } else {
     loadAll(true);
+    if (currentSheet === "MBB") loadMbbTree(true);
   }
 }, CACHE_TTL_MS);
 </script>

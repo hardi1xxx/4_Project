@@ -57,6 +57,67 @@ const STATUS_COLUMN_LETTER = {
 };
 
 // ============================================================
+// KONFIGURASI HALAMAN "TREE DIAGRAM" KHUSUS MBB
+// Kolom tambahan (di luar kolom status) yang dipakai untuk membangun
+// halaman ringkasan visual MBB (kartu keuangan, target Juli, breakdown
+// per region, dsb). Semua berdasarkan huruf kolom di spreadsheet.
+// ============================================================
+const MBB_REGION_LETTER = "BO";      // Region/wilayah proyek
+const MBB_PO_LETTER = "M";           // Nilai PO
+const MBB_BOQ_LETTER = "AH";         // Nilai BoQ
+const MBB_COMCASE_LETTER = "AJ";     // Nilai Comcase
+const MBB_JULI_LETTER = "P";         // Kolom berisi keterangan target bulan (dicari teks "juli")
+
+// Urutan status mentah MBB (kolom U) sesuai funnel proses, dipakai untuk
+// tree diagram, kartu breakdown, dan tabel pivot per region di halaman MBB.
+const MBB_STATUS_ORDER = [
+  "0. HOLD",
+  "0.1 Need Confirm by Tsel",
+  "0.2 Confirmed Batal by Tsel",
+  "1. L0 Survey",
+  "1.1 Done Survey",
+  "2. L0 DRM",
+  "3. L0 Progress Perizinan",
+  "4. L0 Material Delivery",
+  "5.0 L0 Progress FO",
+  "5.1 L0 Progress - Issue BTS",
+  "6. L0 Ready",
+  "7. L1 Ready",
+  "7. L3. OA Confirmation",
+];
+
+// Parse angka dari format Rupiah Indonesia (titik ribuan, koma desimal,
+// bisa ada "Rp" atau spasi). Mengembalikan 0 kalau tidak bisa di-parse.
+function parseRupiahNumber(val) {
+  if (val === null || val === undefined) return 0;
+  let s = String(val).trim();
+  if (!s) return 0;
+  s = s.replace(/rp\.?/gi, "").replace(/\s+/g, "");
+  const hasComma = s.includes(",");
+  const hasDot = s.includes(".");
+  if (hasComma && hasDot) {
+    // format Indonesia: titik = ribuan, koma = desimal
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else if (hasComma && !hasDot) {
+    const parts = s.split(",");
+    if (parts[parts.length - 1].length <= 2) {
+      s = parts.slice(0, -1).join("") + "." + parts[parts.length - 1];
+    } else {
+      s = s.replace(/,/g, "");
+    }
+  } else if (hasDot && !hasComma) {
+    const parts = s.split(".");
+    if (parts.length > 1 && parts[parts.length - 1].length === 3 && parts.length > 2) {
+      s = parts.join("");
+    } else if (parts.length === 2 && parts[1].length === 3) {
+      s = parts.join(""); // "1.234" -> ribuan
+    }
+  }
+  const n = parseFloat(s.replace(/[^0-9.\-]/g, ""));
+  return isNaN(n) ? 0 : n;
+}
+
+// ============================================================
 // PENGECUALIAN / FILTER BARIS PER SHEET
 // Baris yang cocok dengan aturan di sini akan DIBUANG SEPENUHNYA dari
 // total/breakdown/grafik untuk sheet tersebut (bukan cuma disembunyikan
@@ -942,6 +1003,123 @@ app.get("/api/stats-all", async (req, res) => {
     }
   }
   res.json(result);
+});
+
+// Data khusus untuk halaman "Tree Diagram Progress" MBB: kartu keuangan,
+// perbandingan target Juli, breakdown status per region, dan bahan untuk
+// grafik Resume/Issue Analytics.
+app.get("/api/mbb-tree", async (req, res) => {
+  try {
+    const rows = await getSheetData("MBB");
+    const headers = await getSheetHeaders("MBB");
+
+    const colAt = (letter) => {
+      const idx = colLetterToIndex(letter);
+      return idx >= 0 && idx < headers.length ? headers[idx] : null;
+    };
+
+    const regionCol = colAt(MBB_REGION_LETTER);
+    const poCol = colAt(MBB_PO_LETTER);
+    const boqCol = colAt(MBB_BOQ_LETTER);
+    const comcaseCol = colAt(MBB_COMCASE_LETTER);
+    const juliCol = colAt(MBB_JULI_LETTER);
+    const statusColName =
+      colAt(STATUS_COLUMN_LETTER.MBB) ||
+      resolveStatusColumn("MBB", rows, STATUS_COLUMN.MBB, headers);
+
+    function matchStatus(rawValue) {
+      const raw = String(rawValue ?? "").trim();
+      if (!raw) return "(Kosong)";
+      const exact = normalizeStatusText(raw);
+      for (const s of MBB_STATUS_ORDER) {
+        if (normalizeStatusText(s) === exact) return s;
+      }
+      const loose = normalizeStatusTextLoose(raw);
+      for (const s of MBB_STATUS_ORDER) {
+        if (normalizeStatusTextLoose(s) === loose) return s;
+      }
+      return raw; // status lain di luar funnel utama (mis. Proposed Drop, L0 Drop)
+    }
+
+    let totalPO = 0;
+    let totalBoQ = 0;
+    let totalComcase = 0;
+    let targetCount = 0;
+    let actualOnAir = 0;
+
+    const statusCounts = {}; // nilai status (sudah dicocokkan) -> jumlah, lintas semua region
+    const regionMap = {}; // region -> { total, statuses: {status: count} }
+    const issueBTSByRegion = {};
+    const l0ReadyByRegion = {};
+
+    rows.forEach((row) => {
+      const matched = matchStatus(statusColName ? row[statusColName] : "");
+      statusCounts[matched] = (statusCounts[matched] || 0) + 1;
+
+      totalPO += parseRupiahNumber(poCol ? row[poCol] : 0);
+      totalBoQ += parseRupiahNumber(boqCol ? row[boqCol] : 0);
+      totalComcase += parseRupiahNumber(comcaseCol ? row[comcaseCol] : 0);
+
+      const juliVal = juliCol ? String(row[juliCol] || "").toLowerCase() : "";
+      if (juliVal.includes("juli")) {
+        targetCount++;
+        if (matched === "7. L3. OA Confirmation") actualOnAir++;
+      }
+
+      const region = (regionCol ? String(row[regionCol] || "").trim() : "") || "(Tanpa Region)";
+      if (!regionMap[region]) regionMap[region] = { region, total: 0, statuses: {} };
+      regionMap[region].total++;
+      regionMap[region].statuses[matched] = (regionMap[region].statuses[matched] || 0) + 1;
+
+      if (matched === "5.1 L0 Progress - Issue BTS") {
+        issueBTSByRegion[region] = (issueBTSByRegion[region] || 0) + 1;
+      }
+      if (matched === "6. L0 Ready") {
+        l0ReadyByRegion[region] = (l0ReadyByRegion[region] || 0) + 1;
+      }
+    });
+
+    const total = rows.length;
+    const onAir = statusCounts["7. L3. OA Confirmation"] || 0;
+    const nyOnAir = total - onAir; // baris "0.3 Drop MoM" sudah dibuang lewat ROW_FILTER_RULES
+    const drop = 0;
+
+    const funnelBreakdown = MBB_STATUS_ORDER
+      .filter((s) => s !== "7. L3. OA Confirmation")
+      .map((s) => ({ status: s, count: statusCounts[s] || 0 }));
+
+    res.json({
+      total,
+      onAir,
+      nyOnAir,
+      drop,
+      finance: { po: totalPO, boq: totalBoQ, comcase: totalComcase },
+      julyTarget: {
+        target: targetCount,
+        actual: actualOnAir,
+        pct: targetCount > 0 ? Math.round((actualOnAir / targetCount) * 100) : 0,
+      },
+      statusOrder: MBB_STATUS_ORDER,
+      funnelBreakdown,
+      regions: Object.values(regionMap).sort((a, b) => b.total - a.total),
+      issueBTSByRegion: Object.entries(issueBTSByRegion)
+        .map(([region, count]) => ({ region, count }))
+        .sort((a, b) => b.count - a.count),
+      l0ReadyByRegion: Object.entries(l0ReadyByRegion)
+        .map(([region, count]) => ({ region, count }))
+        .sort((a, b) => b.count - a.count),
+      columnsUsed: {
+        region: `${MBB_REGION_LETTER} (${regionCol || "?"})`,
+        po: `${MBB_PO_LETTER} (${poCol || "?"})`,
+        boq: `${MBB_BOQ_LETTER} (${boqCol || "?"})`,
+        comcase: `${MBB_COMCASE_LETTER} (${comcaseCol || "?"})`,
+        juli: `${MBB_JULI_LETTER} (${juliCol || "?"})`,
+        status: statusColName || "?",
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Debug: lihat nilai status mentah yang BELUM ketemu mapping grup-nya,
