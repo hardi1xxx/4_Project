@@ -3,9 +3,11 @@ const fetch = require("node-fetch");
 const { parse } = require("csv-parse/sync");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = process.env.PORT || 3000;
@@ -1081,16 +1083,23 @@ app.get("/api/mbb-tree", async (req, res) => {
 
     const total = rows.length;
     const onAir = statusCounts["7. L3. OA Confirmation"] || 0;
+    const l1ReadyCount = statusCounts["7. L1 Ready"] || 0;
+    // "7. L1 Ready" digabung tampilannya jadi 1 dengan "L1 - On Air" (OA
+    // Confirmation) di tree diagram, supaya tidak dobel kotak untuk 2 tahap
+    // yang secara operasional dianggap 1 fase "L1 - On Air".
+    const l1OnAirCombined = onAir + l1ReadyCount;
     const nyOnAir = total - onAir; // baris "0.3 Drop MoM" sudah dibuang lewat ROW_FILTER_RULES
     const drop = 0;
 
     const funnelBreakdown = MBB_STATUS_ORDER
-      .filter((s) => s !== "7. L3. OA Confirmation")
+      .filter((s) => s !== "7. L3. OA Confirmation" && s !== "7. L1 Ready")
       .map((s) => ({ status: s, count: statusCounts[s] || 0 }));
 
     res.json({
       total,
       onAir,
+      l1ReadyCount,
+      l1OnAirCombined,
       nyOnAir,
       drop,
       finance: { po: totalPO, boq: totalBoQ, comcase: totalComcase },
@@ -1116,7 +1125,138 @@ app.get("/api/mbb-tree", async (req, res) => {
         juli: `${MBB_JULI_LETTER} (${juliCol || "?"})`,
         status: statusColName || "?",
       },
+      // Nama kolom mentah (tanpa huruf), dipakai frontend buat sort baris
+      // waktu kartu Nilai PO/BoQ/Comcase diklik.
+      columnNames: {
+        po: poCol || null,
+        boq: boqCol || null,
+        comcase: comcaseCol || null,
+      },
     });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Ambil baris mentah (LOP) yang cocok dengan salah satu kategori di halaman
+// "Tree Diagram Progress" MBB — dipakai supaya SEMUA kartu/node di halaman
+// itu (root Site ID, cabang L1 On Air/NY On Air/Drop, tiap status funnel,
+// tiap sel di tabel pivot region, kartu Resume L0 Ready per Region, dst)
+// bisa diklik dan menampilkan daftar LOP aslinya.
+//
+// Query params:
+//   type   = "total" | "onair" | "nyonair" | "drop" | "status" | "region"
+//   status = nilai status funnel (dipakai kalau type = "status")
+//   region = nama region, BISA digabung dengan type lain sebagai filter
+//            tambahan (mis. type=status&status=6.%20L0%20Ready&region=JAKARTA)
+app.get("/api/mbb-tree-rows", async (req, res) => {
+  try {
+    const rows = await getSheetData("MBB");
+    const headers = await getSheetHeaders("MBB");
+
+    const colAt = (letter) => {
+      const idx = colLetterToIndex(letter);
+      return idx >= 0 && idx < headers.length ? headers[idx] : null;
+    };
+
+    const regionCol = colAt(MBB_REGION_LETTER);
+    const statusColName =
+      colAt(STATUS_COLUMN_LETTER.MBB) ||
+      resolveStatusColumn("MBB", rows, STATUS_COLUMN.MBB, headers);
+
+    function matchStatus(rawValue) {
+      const raw = String(rawValue ?? "").trim();
+      if (!raw) return "(Kosong)";
+      const exact = normalizeStatusText(raw);
+      for (const s of MBB_STATUS_ORDER) {
+        if (normalizeStatusText(s) === exact) return s;
+      }
+      const loose = normalizeStatusTextLoose(raw);
+      for (const s of MBB_STATUS_ORDER) {
+        if (normalizeStatusTextLoose(s) === loose) return s;
+      }
+      return raw;
+    }
+
+    const type = String(req.query.type || "total").trim();
+    const statusVal = req.query.status ? String(req.query.status) : "";
+    const regionVal = req.query.region ? String(req.query.region) : "";
+
+    const filtered = rows.filter((row) => {
+      const region = (regionCol ? String(row[regionCol] || "").trim() : "") || "(Tanpa Region)";
+      if (regionVal && region !== regionVal) return false;
+
+      if (type === "region") return true; // sudah difilter region di atas
+      if (type === "total") return true;
+
+      const matched = matchStatus(statusColName ? row[statusColName] : "");
+      if (type === "onair") return matched === "7. L3. OA Confirmation";
+      if (type === "onair_combined") return matched === "7. L3. OA Confirmation" || matched === "7. L1 Ready";
+      if (type === "nyrfi") return matched !== "7. L3. OA Confirmation" && matched !== "7. L1 Ready";
+      if (type === "nyonair") return matched !== "7. L3. OA Confirmation";
+      if (type === "drop") return false; // baris drop sudah dibuang total dari data lewat ROW_FILTER_RULES
+      if (type === "status") return matched === statusVal;
+      return true;
+    });
+
+    const columns = filtered.length > 0 ? Object.keys(filtered[0]) : (rows.length > 0 ? Object.keys(rows[0]) : []);
+
+    res.json({
+      type,
+      status: statusVal,
+      region: regionVal,
+      total: filtered.length,
+      columns,
+      rows: filtered,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// CATATAN (NOTES) HALAMAN TREE DIAGRAM MBB
+// Menggantikan panel "List L0 Ready Issue BTS per Region". Disimpan di
+// file JSON di server (data/mbb-notes.json) supaya SEMUA user yang buka
+// dashboard melihat catatan yang sama (shared, bukan per-browser).
+//
+// CATATAN PENTING: kalau di-deploy ke Railway TANPA Volume, filesystem
+// container bersifat sementara (ephemeral) — file ini bisa hilang saat
+// redeploy baru. Kalau butuh catatan yang benar-benar permanen lintas
+// deploy, tambahkan Railway Volume yang di-mount ke folder `data/`.
+// ============================================================
+const NOTES_DIR = path.join(__dirname, "data");
+const NOTES_FILE = path.join(NOTES_DIR, "mbb-notes.json");
+
+function ensureNotesFile() {
+  try {
+    if (!fs.existsSync(NOTES_DIR)) fs.mkdirSync(NOTES_DIR, { recursive: true });
+    if (!fs.existsSync(NOTES_FILE)) {
+      fs.writeFileSync(NOTES_FILE, JSON.stringify({ notes: "", updatedAt: null }, null, 2));
+    }
+  } catch (e) {
+    console.error("Gagal menyiapkan file catatan:", e.message);
+  }
+}
+ensureNotesFile();
+
+app.get("/api/mbb-notes", (req, res) => {
+  try {
+    ensureNotesFile();
+    const data = JSON.parse(fs.readFileSync(NOTES_FILE, "utf-8"));
+    res.json(data);
+  } catch (err) {
+    res.json({ notes: "", updatedAt: null });
+  }
+});
+
+app.post("/api/mbb-notes", (req, res) => {
+  try {
+    const notes = String((req.body && req.body.notes) ?? "");
+    const data = { notes, updatedAt: new Date().toISOString() };
+    ensureNotesFile();
+    fs.writeFileSync(NOTES_FILE, JSON.stringify(data, null, 2));
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

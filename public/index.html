@@ -618,29 +618,7 @@
   .mbb-panel h3 { margin: 0 0 12px; font-size: 13.5px; font-weight: 800; }
   .mbb-panel + .mbb-panel { margin-top: 14px; }
 
-  /* --- Tree diagram (kiri) --- */
-  .tree-root-node {
-    display: inline-block;
-    background: #1e3a5f;
-    color: #fff;
-    font-weight: 800;
-    font-size: 12.5px;
-    border-radius: 10px;
-    padding: 10px 14px;
-    text-align: center;
-    margin-bottom: 14px;
-  }
-  .tree-root-node b { display: block; font-size: 20px; margin-top: 2px; }
-  .tree-branch-grid { display: flex; gap: 14px; }
-  .tree-main-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 118px; }
-  .tree-sub-col {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;
-    border-left: 2px solid var(--border);
-    padding-left: 12px;
-  }
+  /* --- Tree diagram org-chart (kiri), gaya kotak + garis penghubung --- */
   .tree-node {
     border-radius: 8px;
     padding: 8px 10px;
@@ -654,30 +632,81 @@
     gap: 6px;
   }
   .tree-node b { font-size: 14px; }
-  .tree-node.l1onair { background: #dcfce7; color: #15803d; }
-  .tree-node.nyonair { background: #dbeafe; color: #1d4ed8; }
-  .tree-node.drop { background: #fee2e2; color: #b91c1c; }
-  .tree-sub-col .tree-node {
-    position: relative;
-    background: var(--panel-soft);
-    color: var(--text);
-  }
-  .tree-sub-col .tree-node:before {
-    content: "";
+
+  .tc-scroll { overflow-x: auto; padding-bottom: 4px; }
+  .tc-wrap { position: relative; margin: 6px auto; }
+  .tc-svg { position: absolute; left: 0; top: 0; z-index: 0; overflow: visible; }
+  .tc-svg path { stroke: #94a3b8; stroke-width: 2; fill: none; }
+  .tc-node {
     position: absolute;
-    left: -12px;
-    top: 50%;
-    width: 12px;
-    height: 1px;
-    background: var(--border);
+    z-index: 1;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 4px 10px;
+    box-shadow: var(--shadow-sm);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .tc-node:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+  .tc-node .tc-label { font-size: 11px; font-weight: 700; opacity: .92; line-height: 1.25; }
+  .tc-node .tc-value { font-size: 19px; font-weight: 900; margin-top: 3px; line-height: 1; }
+  .tc-root { background: #1e293b; color: #fff; }
+  .tc-branch { background: #3d6a8a; color: #fff; }
+  .tc-drop { background: #c2622f; color: #fff; }
+  .tc-leaf { background: #dcecfb; color: #0f172a; border: 1px solid #bcdcf3; }
+  .tc-leaf .tc-value { color: #1d4ed8; }
+
+  /* --- Resume L0 Ready per Region (kartu per region) --- */
+  .mbb-region-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-top: 4px; }
+  .mbb-region-card {
+    background: var(--panel-soft);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .mbb-region-card:hover { box-shadow: var(--shadow-sm); transform: translateY(-2px); }
+  .mbb-region-card .mbb-region-name { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mbb-region-card .mbb-region-val { font-size: 22px; font-weight: 800; color: var(--accent); margin-top: 4px; }
+
+  /* --- Catatan / Notes --- */
+  .mbb-notes-textarea {
+    width: 100%;
+    min-height: 168px;
+    resize: vertical;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--panel-soft);
+  }
+  .mbb-notes-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .mbb-notes-status { font-size: 11.5px; color: var(--muted); }
+
+  /* --- Panel kanan (versi ringkas + RFI flow) --- */
+  .status-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .status-list .tree-node { background: #dcfce7; color: #166534; cursor: pointer; }
+  .rfi-flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .rfi-flow .tree-node { flex: 1; min-width: 70px; text-align: center; justify-content: center; flex-direction: column; background: #fef3c7; color: #92400e; cursor: pointer; }
+  .rfi-flow .arrow { color: var(--muted); font-weight: 900; }
+
+  /* --- Tabel pivot region: sel bisa diklik --- */
+  .mbb-pivot td.pivot-cell, .mbb-pivot td.pivot-region, .mbb-pivot td.pivot-region-total, .mbb-pivot td.pivot-all-total {
+    cursor: pointer;
+  }
+  .mbb-pivot td.pivot-cell:hover, .mbb-pivot td.pivot-region:hover, .mbb-pivot td.pivot-region-total:hover, .mbb-pivot td.pivot-all-total:hover {
+    background: var(--accent-soft);
   }
 
-  /* --- Panel kanan (versi lain + RFI flow) --- */
-  .status-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-  .status-list .tree-node { background: #dcfce7; color: #166534; }
-  .rfi-flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .rfi-flow .tree-node { flex: 1; min-width: 70px; text-align: center; justify-content: center; flex-direction: column; background: #fef3c7; color: #92400e; }
-  .rfi-flow .arrow { color: var(--muted); font-weight: 900; }
+  .modal-row-clickable { cursor: pointer; }
+  .modal-row-clickable:hover { background: var(--accent-soft); }
 
   .mbb-empty-note { font-size: 12px; color: var(--muted); padding: 10px 0; }
 
@@ -765,20 +794,19 @@
 
         <div>
           <div class="mbb-panel">
-            <h3>Resume &amp; Issue Analytics — List L0 Ready Issue BTS per Region</h3>
-            <div class="chart-wrap" style="height:210px;"><canvas id="mbbIssueChart"></canvas></div>
-          </div>
-          <div class="mbb-panel">
-            <h3>Resume L0 Ready per Region</h3>
-            <div class="chart-wrap" style="height:210px;"><canvas id="mbbL0ReadyChart"></canvas></div>
+            <h3>📝 Catatan / Notes</h3>
+            <div class="sub" style="margin-bottom:8px;">Catatan bebas terkait Issue BTS atau hal lain di project MBB. Tersimpan di server, bisa dilihat semua orang yang buka dashboard ini.</div>
+            <textarea id="mbbNotesTextarea" class="mbb-notes-textarea" placeholder="Tulis catatan di sini..."></textarea>
+            <div class="mbb-notes-actions">
+              <button class="primary" id="mbbNotesSaveBtn">Simpan Catatan</button>
+              <span class="mbb-notes-status" id="mbbNotesStatus"></span>
+            </div>
           </div>
         </div>
 
         <div class="mbb-panel">
-          <h3>Status Pekerjaan — Versi Ringkas</h3>
-          <div class="status-list" id="mbbStatusList"></div>
-          <h3>RFI Flow</h3>
-          <div class="rfi-flow" id="mbbRfiFlow"></div>
+          <h3>RFI Flow — Tree Diagram</h3>
+          <div id="mbbCenterTreeContent"></div>
         </div>
       </div>
 
@@ -941,6 +969,7 @@ function switchTab(sheetOrSummary, deferredFilter = null) {
     if (currentSheet === "MBB") {
       mbbTreeViewEl.style.display = "block";
       loadMbbTree();
+      loadMbbNotes();
     } else {
       mbbTreeViewEl.style.display = "none";
     }
@@ -1168,6 +1197,12 @@ function formatMiliar(n) {
   return v.toLocaleString("id-ID", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + "B";
 }
 
+// Format angka jadi "113JT" (dibulatkan ke satuan juta terdekat).
+function formatJuta(n) {
+  const jt = Math.round((Number(n) || 0) / 1e6);
+  return jt.toLocaleString("id-ID") + "JT";
+}
+
 function friendlyStatusLabel(status) {
   return String(status || "").replace(/^\d+(\.\d+)*\s*/, "").trim() || status;
 }
@@ -1199,29 +1234,27 @@ async function loadMbbTree(forceRefresh = false) {
 
 function renderMbbTree(data) {
   document.getElementById("mbbHeadingSub").textContent =
-    `Total Site ID: ${data.total} · L1 On Air: ${data.onAir} · NY On Air: ${data.nyOnAir}`;
+    `Total Site ID: ${data.total} · L1 On Air: ${data.l1OnAirCombined} · NY On Air: ${data.nyOnAir}`;
   const cu = data.columnsUsed || {};
   document.getElementById("mbbColsNote").textContent =
     `Region: ${cu.region || "-"} · PO: ${cu.po || "-"} · BoQ: ${cu.boq || "-"} · Comcase: ${cu.comcase || "-"}`;
 
-  // ---- Baris atas: kartu keuangan + target Juli ----
+  // ---- Baris atas: kartu keuangan (klik-able) + target Juli ----
   const fin = data.finance || { po: 0, boq: 0, comcase: 0 };
   const jt = data.julyTarget || { target: 0, actual: 0, pct: 0 };
+  const colNames = data.columnNames || {};
   document.getElementById("mbbTopRow").innerHTML = `
-    <div class="mbb-fin-card">
+    <div class="mbb-fin-card" id="mbbFinPO" title="Klik untuk lihat rincian Site ID, diurutkan dari Nilai PO terbesar">
       <div class="label">Nilai PO</div>
-      <div class="val">${formatMiliar(fin.po)}</div>
-      <div class="foot">Total kolom M</div>
+      <div class="val">${formatJuta(fin.po)}</div>
     </div>
-    <div class="mbb-fin-card">
+    <div class="mbb-fin-card" id="mbbFinBoQ" title="Klik untuk lihat rincian Site ID, diurutkan dari Nilai BoQ terbesar">
       <div class="label">Nilai BoQ</div>
-      <div class="val">${formatMiliar(fin.boq)}</div>
-      <div class="foot">Total kolom AH</div>
+      <div class="val">${formatJuta(fin.boq)}</div>
     </div>
-    <div class="mbb-fin-card">
+    <div class="mbb-fin-card" id="mbbFinComcase" title="Klik untuk lihat rincian Site ID, diurutkan dari Nilai Comcase terbesar">
       <div class="label">Nilai Comcase</div>
-      <div class="val">${formatMiliar(fin.comcase)}</div>
-      <div class="foot">Total kolom AJ</div>
+      <div class="val">${formatJuta(fin.comcase)}</div>
     </div>
     <div class="mbb-target-card">
       <div class="mbb-donut-wrap">
@@ -1239,50 +1272,248 @@ function renderMbbTree(data) {
   `;
   renderMbbJulyChart(jt);
 
-  // ---- Tree diagram kiri ----
+  document.getElementById("mbbFinPO").onclick = () => openMbbDetail({ type: "total", title: "Nilai PO — Rincian Site ID", sortColumn: colNames.po, sortLabel: "Nilai PO" });
+  document.getElementById("mbbFinBoQ").onclick = () => openMbbDetail({ type: "total", title: "Nilai BoQ — Rincian Site ID", sortColumn: colNames.boq, sortLabel: "Nilai BoQ" });
+  document.getElementById("mbbFinComcase").onclick = () => openMbbDetail({ type: "total", title: "Nilai Comcase — Rincian Site ID", sortColumn: colNames.comcase, sortLabel: "Nilai Comcase" });
+
+  // ---- Tree diagram (org-chart): L1 Ready sudah digabung ke L1 - On Air ----
   const funnel = data.funnelBreakdown || [];
-  const subNodesHtml = funnel.map((item) => `
-    <div class="tree-node">
-      <span>${escapeHtml(friendlyStatusLabel(item.status))}</span>
-      <b>${item.count}</b>
-    </div>
-  `).join("");
-  document.getElementById("mbbTreeContent").innerHTML = `
-    <div class="tree-root-node">Site ID<b>${data.total}</b></div>
-    <div class="tree-branch-grid">
-      <div class="tree-main-col">
-        <div class="tree-node l1onair"><span>L1 - On Air</span><b>${data.onAir}</b></div>
-        <div class="tree-node nyonair"><span>NY On Air</span><b>${data.nyOnAir}</b></div>
-        <div class="tree-node drop"><span>Drop</span><b>${data.drop}</b></div>
-      </div>
-      <div class="tree-sub-col">
-        ${subNodesHtml || '<div class="mbb-empty-note">Tidak ada data</div>'}
-      </div>
-    </div>
-  `;
+  const treeRoot = {
+    label: "Site ID",
+    value: data.total,
+    onClick: () => openMbbDetail({ type: "total", title: "Site ID (Semua LOP)" }),
+  };
+  const treeBranches = [
+    { label: "L1 - On Air", value: data.l1OnAirCombined,
+      onClick: () => openMbbDetail({ type: "onair_combined", title: "L1 - On Air (termasuk L1 Ready)" }) },
+    { label: "NY On Air", value: data.nyOnAir, connectsToLeaves: true,
+      onClick: () => openMbbDetail({ type: "nyonair", title: "NY On Air" }) },
+    { label: "Drop", value: data.drop, cls: "tc-drop",
+      onClick: () => openMbbDetail({ type: "drop", title: "Drop" }) },
+  ];
+  const treeLeaves = funnel.map((item) => ({
+    label: friendlyStatusLabel(item.status),
+    value: item.count,
+    onClick: () => openMbbDetail({ type: "status", status: item.status, title: friendlyStatusLabel(item.status) }),
+  }));
+  renderTreeOrgChart(document.getElementById("mbbTreeContent"), {
+    root: treeRoot,
+    branches: treeBranches,
+    leaves: treeLeaves,
+  });
 
-  // ---- Panel kanan: versi ringkas + RFI flow ----
-  document.getElementById("mbbStatusList").innerHTML = funnel.map((item) => `
-    <div class="tree-node">
-      <span>${escapeHtml(friendlyStatusLabel(item.status))}</span>
-      <b>${item.count}</b>
-    </div>
-  `).join("") || '<div class="mbb-empty-note">Tidak ada data</div>';
+  // ---- Panel kanan: tree diagram RFI Flow (Site ID di tengah, NY RFI di
+  // kiri dengan breakdown funnel, RFI/L1-On Air di kanan) ----
+  renderCenterFlowTree(document.getElementById("mbbCenterTreeContent"), {
+    center: {
+      label: "Site ID",
+      value: data.total,
+      onClick: () => openMbbDetail({ type: "total", title: "Site ID (Semua LOP)" }),
+    },
+    leftBranch: {
+      label: "NY RFI",
+      value: data.nyOnAir - data.l1ReadyCount,
+      onClick: () => openMbbDetail({ type: "nyrfi", title: "NY RFI" }),
+    },
+    rightBranch: {
+      label: "RFI",
+      value: data.l1OnAirCombined,
+      onClick: () => openMbbDetail({ type: "onair_combined", title: "RFI (L1 - On Air)" }),
+    },
+    leftLeaves: treeLeaves,
+  });
 
-  document.getElementById("mbbRfiFlow").innerHTML = `
-    <div class="tree-node"><span>Site ID</span><b>${data.total}</b></div>
-    <span class="arrow">→</span>
-    <div class="tree-node"><span>NY RFI</span><b>${data.nyOnAir}</b></div>
-    <span class="arrow">→</span>
-    <div class="tree-node"><span>RFI</span><b>${data.onAir}</b></div>
-  `;
-
-  // ---- Grafik Resume & Issue Analytics (per region) ----
-  renderMbbBarChart("mbbIssueChart", "mbbIssueChartInstance", data.issueBTSByRegion || []);
-  renderMbbPieChart("mbbL0ReadyChart", data.l0ReadyByRegion || []);
+  // Samakan tinggi kotak Catatan dengan tinggi tree diagram (kiri), supaya
+  // panjangnya sama walau jumlah kategori berubah-ubah.
+  requestAnimationFrame(() => {
+    const treeWrap = document.querySelector("#mbbTreeContent .tc-wrap");
+    const notesTa = document.getElementById("mbbNotesTextarea");
+    if (treeWrap && notesTa) {
+      const treeH = treeWrap.getBoundingClientRect().height;
+      notesTa.style.height = Math.max(160, treeH - 108) + "px";
+    }
+  });
 
   // ---- Tabel pivot region ----
   renderMbbPivotTable(data);
+}
+
+// ------------------------------------------------------------
+// Org-chart tree diagram (root -> cabang -> sub-status) dengan garis
+// penghubung siku, gaya kotak seperti referensi. Layout dihitung dinamis
+// tergantung jumlah item, lalu dirender sebagai div (kotak) di atas SVG
+// (garis).
+// ------------------------------------------------------------
+function renderTreeOrgChart(container, { root, branches, leaves }) {
+  const rootW = 140, rootH = 66;
+  const branchW = 168, branchH = 58;
+  const leafW = 190, leafH = 46;
+  const gapBranch = 22, gapLeaf = 9;
+  const colGap = 56;
+
+  const leavesN = leaves.length;
+  const branchesN = branches.length;
+
+  const leavesBlockH = leavesN > 0 ? leavesN * leafH + (leavesN - 1) * gapLeaf : 0;
+  const branchesBlockH = branchesN > 0 ? branchesN * branchH + (branchesN - 1) * gapBranch : 0;
+  const totalH = Math.max(leavesBlockH, branchesBlockH, rootH) + 20;
+
+  function distribute(n, h) {
+    if (n === 0) return [];
+    if (n === 1) return [(totalH - h) / 2];
+    const step = (totalH - h) / (n - 1);
+    return Array.from({ length: n }, (_, i) => i * step);
+  }
+
+  const leafYs = distribute(leavesN, leafH);
+  const branchYs = distribute(branchesN, branchH);
+  const rootY = (totalH - rootH) / 2;
+
+  const xRoot = 0;
+  const xBranch = rootW + colGap;
+  const xLeaf = xBranch + branchW + colGap;
+  const totalW = xLeaf + leafW + 4;
+
+  const trunkIdx = branches.findIndex((b) => b.connectsToLeaves);
+
+  let svgPaths = "";
+  const midX1 = rootW + colGap / 2;
+  const rootMidY = rootY + rootH / 2;
+  if (branchesN > 0) {
+    svgPaths += `<path d="M${xRoot + rootW},${rootMidY} H${midX1}" />`;
+    const firstBY = branchYs[0] + branchH / 2;
+    const lastBY = branchYs[branchesN - 1] + branchH / 2;
+    svgPaths += `<path d="M${midX1},${firstBY} V${lastBY}" />`;
+    branchYs.forEach((by) => {
+      const cy = by + branchH / 2;
+      svgPaths += `<path d="M${midX1},${cy} H${xBranch}" />`;
+    });
+  }
+  if (trunkIdx >= 0 && leavesN > 0) {
+    const midX2 = xBranch + branchW + colGap / 2;
+    const trunkCY = branchYs[trunkIdx] + branchH / 2;
+    svgPaths += `<path d="M${xBranch + branchW},${trunkCY} H${midX2}" />`;
+    const firstLY = leafYs[0] + leafH / 2;
+    const lastLY = leafYs[leavesN - 1] + leafH / 2;
+    svgPaths += `<path d="M${midX2},${firstLY} V${lastLY}" />`;
+    leafYs.forEach((ly) => {
+      const cy = ly + leafH / 2;
+      svgPaths += `<path d="M${midX2},${cy} H${xLeaf}" />`;
+    });
+  }
+
+  let nodesHtml = "";
+  nodesHtml += `<div class="tc-node tc-root" style="left:${xRoot}px;top:${rootY}px;width:${rootW}px;height:${rootH}px;" data-tc-idx="root"><span class="tc-label">${escapeHtml(root.label)}</span><span class="tc-value">${(Number(root.value) || 0).toLocaleString("id-ID")}</span></div>`;
+  branches.forEach((b, i) => {
+    nodesHtml += `<div class="tc-node ${b.cls || "tc-branch"}" style="left:${xBranch}px;top:${branchYs[i]}px;width:${branchW}px;height:${branchH}px;" data-tc-idx="branch-${i}"><span class="tc-label">${escapeHtml(b.label)}</span><span class="tc-value">${(Number(b.value) || 0).toLocaleString("id-ID")}</span></div>`;
+  });
+  leaves.forEach((l, i) => {
+    nodesHtml += `<div class="tc-node tc-leaf" style="left:${xLeaf}px;top:${leafYs[i]}px;width:${leafW}px;height:${leafH}px;" data-tc-idx="leaf-${i}"><span class="tc-label">${escapeHtml(l.label)}</span><span class="tc-value">${(Number(l.value) || 0).toLocaleString("id-ID")}</span></div>`;
+  });
+
+  container.innerHTML = `
+    <div class="tc-scroll">
+      <div class="tc-wrap" style="width:${totalW}px;height:${totalH}px;">
+        <svg class="tc-svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">${svgPaths}</svg>
+        ${nodesHtml}
+      </div>
+    </div>
+  `;
+
+  const rootEl = container.querySelector('[data-tc-idx="root"]');
+  if (rootEl) { rootEl.style.cursor = "pointer"; rootEl.onclick = root.onClick; }
+  branches.forEach((b, i) => {
+    const el = container.querySelector(`[data-tc-idx="branch-${i}"]`);
+    if (el) { el.style.cursor = "pointer"; el.onclick = b.onClick; }
+  });
+  leaves.forEach((l, i) => {
+    const el = container.querySelector(`[data-tc-idx="leaf-${i}"]`);
+    if (el) { el.style.cursor = "pointer"; el.onclick = l.onClick; }
+  });
+}
+
+// ------------------------------------------------------------
+// Tree diagram "RFI Flow": Site ID di TENGAH, cabang "NY RFI" di kiri
+// (dengan daftar sub-status funnel mengembang lebih ke kiri lagi), dan
+// cabang "RFI" (= L1-On Air, sudah termasuk L1 Ready) di kanan.
+//
+// CATATAN: dengan definisi ini, sisi RFI (kanan) = jumlah baris yang
+// status-nya PERSIS "L1 Ready" atau "OA Confirmation", jadi TIDAK dipecah
+// lagi jadi kategori Hold/Survey/DRM dst — karena baris yang sudah di fase
+// itu, secara definisi, sudah tidak lagi berstatus Hold/Survey/dll. Kalau
+// nanti butuh breakdown Hold/Survey/dll versi khusus untuk sisi RFI (mis.
+// kendala yang muncul SETELAH RFI), kasih tau kolom sumbernya di
+// spreadsheet, nanti saya sambungkan.
+// ------------------------------------------------------------
+function renderCenterFlowTree(container, { leftLeaves, leftBranch, center, rightBranch }) {
+  const leafW = 190, leafH = 46, gapLeaf = 9;
+  const branchW = 150, branchH = 70;
+  const centerW = 150, centerH = 74;
+  const colGap = 56;
+
+  const n = leftLeaves.length;
+  const leavesBlockH = n > 0 ? n * leafH + (n - 1) * gapLeaf : 0;
+  const totalH = Math.max(leavesBlockH, branchH, centerH) + 20;
+
+  function distribute(count, h) {
+    if (count === 0) return [];
+    if (count === 1) return [(totalH - h) / 2];
+    const step = (totalH - h) / (count - 1);
+    return Array.from({ length: count }, (_, i) => i * step);
+  }
+
+  const leafYs = distribute(n, leafH);
+  const branchY = (totalH - branchH) / 2;
+  const centerY = (totalH - centerH) / 2;
+
+  const xLeaf = 0;
+  const xBranchLeft = xLeaf + leafW + colGap;
+  const xCenter = xBranchLeft + branchW + colGap;
+  const xBranchRight = xCenter + centerW + colGap;
+  const totalW = xBranchRight + branchW;
+
+  let svgPaths = "";
+  if (n > 0) {
+    const midX0 = xLeaf + leafW + colGap / 2;
+    leafYs.forEach((ly) => {
+      const cy = ly + leafH / 2;
+      svgPaths += `<path d="M${xLeaf + leafW},${cy} H${midX0}" />`;
+    });
+    const firstLY = leafYs[0] + leafH / 2;
+    const lastLY = leafYs[n - 1] + leafH / 2;
+    svgPaths += `<path d="M${midX0},${firstLY} V${lastLY}" />`;
+    svgPaths += `<path d="M${midX0},${branchY + branchH / 2} H${xBranchLeft}" />`;
+  }
+  svgPaths += `<path d="M${xBranchLeft + branchW},${branchY + branchH / 2} H${xCenter}" />`;
+  svgPaths += `<path d="M${xCenter + centerW},${centerY + centerH / 2} H${xBranchRight}" />`;
+
+  let nodesHtml = "";
+  leftLeaves.forEach((l, i) => {
+    nodesHtml += `<div class="tc-node tc-leaf" style="left:${xLeaf}px;top:${leafYs[i]}px;width:${leafW}px;height:${leafH}px;" data-cf-idx="leaf-${i}"><span class="tc-label">${escapeHtml(l.label)}</span><span class="tc-value">${(Number(l.value) || 0).toLocaleString("id-ID")}</span></div>`;
+  });
+  nodesHtml += `<div class="tc-node tc-branch" style="left:${xBranchLeft}px;top:${branchY}px;width:${branchW}px;height:${branchH}px;" data-cf-idx="branchLeft"><span class="tc-label">${escapeHtml(leftBranch.label)}</span><span class="tc-value">${(Number(leftBranch.value) || 0).toLocaleString("id-ID")}</span></div>`;
+  nodesHtml += `<div class="tc-node tc-root" style="left:${xCenter}px;top:${centerY}px;width:${centerW}px;height:${centerH}px;" data-cf-idx="center"><span class="tc-label">${escapeHtml(center.label)}</span><span class="tc-value">${(Number(center.value) || 0).toLocaleString("id-ID")}</span></div>`;
+  nodesHtml += `<div class="tc-node tc-branch" style="left:${xBranchRight}px;top:${branchY}px;width:${branchW}px;height:${branchH}px;" data-cf-idx="branchRight"><span class="tc-label">${escapeHtml(rightBranch.label)}</span><span class="tc-value">${(Number(rightBranch.value) || 0).toLocaleString("id-ID")}</span></div>`;
+
+  container.innerHTML = `
+    <div class="tc-scroll">
+      <div class="tc-wrap" style="width:${totalW}px;height:${totalH}px;">
+        <svg class="tc-svg" width="${totalW}" height="${totalH}" viewBox="0 0 ${totalW} ${totalH}">${svgPaths}</svg>
+        ${nodesHtml}
+      </div>
+    </div>
+  `;
+
+  leftLeaves.forEach((l, i) => {
+    const el = container.querySelector(`[data-cf-idx="leaf-${i}"]`);
+    if (el) { el.style.cursor = "pointer"; el.onclick = l.onClick; }
+  });
+  const blEl = container.querySelector('[data-cf-idx="branchLeft"]');
+  if (blEl) { blEl.style.cursor = "pointer"; blEl.onclick = leftBranch.onClick; }
+  const ctrEl = container.querySelector('[data-cf-idx="center"]');
+  if (ctrEl) { ctrEl.style.cursor = "pointer"; ctrEl.onclick = center.onClick; }
+  const brEl = container.querySelector('[data-cf-idx="branchRight"]');
+  if (brEl) { brEl.style.cursor = "pointer"; brEl.onclick = rightBranch.onClick; }
 }
 
 function renderMbbJulyChart(jt) {
@@ -1301,50 +1532,6 @@ function renderMbbJulyChart(jt) {
   });
 }
 
-function renderMbbBarChart(canvasId, instanceVarNameIgnored, rows) {
-  if (typeof Chart === "undefined") return;
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  if (mbbIssueChartInstance) { mbbIssueChartInstance.destroy(); mbbIssueChartInstance = null; }
-  const top = rows.slice(0, 10);
-  mbbIssueChartInstance = new Chart(canvas.getContext("2d"), {
-    type: "bar",
-    data: {
-      labels: top.map((r) => r.region),
-      datasets: [{ label: "Issue BTS", data: top.map((r) => r.count), backgroundColor: "#2563eb", borderRadius: 5 }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { color: "#1e293b", font: { size: 10.5 } }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { color: "#64748b", precision: 0 }, grid: { color: "#eef2f7" } },
-      },
-    },
-  });
-}
-
-function renderMbbPieChart(canvasId, rows) {
-  if (typeof Chart === "undefined") return;
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  if (mbbL0ReadyChartInstance) { mbbL0ReadyChartInstance.destroy(); mbbL0ReadyChartInstance = null; }
-  const top = rows.slice(0, 8);
-  mbbL0ReadyChartInstance = new Chart(canvas.getContext("2d"), {
-    type: "pie",
-    data: {
-      labels: top.map((r) => r.region),
-      datasets: [{ data: top.map((r) => r.count), backgroundColor: PALETTE }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { position: "right", labels: { color: "#1e293b", boxWidth: 10, font: { size: 10.5 } } } },
-    },
-  });
-}
-
 function renderMbbPivotTable(data) {
   const table = document.getElementById("mbbPivotTable");
   const cols = data.statusOrder || [];
@@ -1360,13 +1547,14 @@ function renderMbbPivotTable(data) {
     const cells = cols.map((c, i) => {
       const v = r.statuses[c] || 0;
       grandTotals[i] += v;
-      return `<td class="${v === 0 ? "zero" : ""}">${v === 0 ? "-" : v}</td>`;
+      if (v === 0) return `<td class="zero">-</td>`;
+      return `<td class="pivot-cell" data-status="${escapeHtml(c)}" data-region="${escapeHtml(r.region)}" title="Klik untuk lihat daftar LOP">${v}</td>`;
     }).join("");
     grandAll += r.total;
-    return `<tr><td>${escapeHtml(r.region)}</td>${cells}<td>${r.total}</td></tr>`;
+    return `<tr><td class="pivot-region" data-region="${escapeHtml(r.region)}" title="Klik untuk lihat semua LOP region ini">${escapeHtml(r.region)}</td>${cells}<td class="pivot-region-total" data-region="${escapeHtml(r.region)}" title="Klik untuk lihat semua LOP region ini">${r.total}</td></tr>`;
   }).join("");
 
-  const grandRow = `<tr><td>Grand total</td>${grandTotals.map((v) => `<td>${v}</td>`).join("")}<td>${grandAll}</td></tr>`;
+  const grandRow = `<tr><td>Grand total</td>${grandTotals.map((v, i) => (v > 0 ? `<td class="pivot-cell" data-status="${escapeHtml(cols[i])}" title="Klik untuk lihat semua LOP status ini">${v}</td>` : `<td class="zero">-</td>`)).join("")}<td class="pivot-all-total" title="Klik untuk lihat semua LOP">${grandAll}</td></tr>`;
 
   table.innerHTML = `
     <thead><tr>${theadCells}</tr></thead>
@@ -1519,25 +1707,116 @@ function renderModalRowsPage(page) {
   const start = normalizedPage * MODAL_ROWS_PER_PAGE;
   const slice = rows.slice(start, start + MODAL_ROWS_PER_PAGE);
   const paginationHtml = renderModalPagination(totalPages, normalizedPage);
-  const pageLabel = `<div style="margin-top:12px;color:var(--muted);font-size:12px;">Menampilkan halaman ${normalizedPage + 1} dari ${totalPages} (${rows.length} baris terkait)</div>`;
-  updateModalContent(`${modalPageState.headerHtml}${renderRowsAsTable(columns, slice)}${pageLabel}${paginationHtml}`);
+  const clickHint = modalPageState.clickable ? " · klik satu baris untuk lihat detail lengkap" : "";
+  const pageLabel = `<div style="margin-top:12px;color:var(--muted);font-size:12px;">Menampilkan halaman ${normalizedPage + 1} dari ${totalPages} (${rows.length} baris terkait)${clickHint}</div>`;
+  updateModalContent(`${modalPageState.headerHtml}${renderRowsAsTable(columns, slice, { clickable: modalPageState.clickable, startIndex: start })}${pageLabel}${paginationHtml}`);
 }
 
-function prepareModalRowsPagination(rows, columns, headerHtml) {
-  modalPageState = { rows, columns, page: 0, headerHtml };
+function prepareModalRowsPagination(rows, columns, headerHtml, opts = {}) {
+  modalPageState = { rows, columns, page: 0, headerHtml, clickable: !!opts.clickable };
   renderModalRowsPage(0);
 }
 
-function renderRowsAsTable(columns, rows) {
+function renderRowsAsTable(columns, rows, opts = {}) {
   if (!rows || rows.length === 0) return `<div class="empty">Tidak ada baris terkait.</div>`;
   const header = columns.map((c) => `<th>${escapeHtml(c)}</th>`).join("");
   const body = rows
-    .map((row) => {
+    .map((row, i) => {
       const cells = columns.map((c) => `<td>${escapeHtml(row[c] ?? "")}</td>`).join("");
+      if (opts.clickable) {
+        const idx = (opts.startIndex || 0) + i;
+        return `<tr class="modal-row-clickable" data-modal-row-idx="${idx}">${cells}</tr>`;
+      }
       return `<tr>${cells}</tr>`;
     })
     .join("");
   return `<div style="overflow:auto;max-height:260px;"><table style="width:100%;border-collapse:collapse;"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
+// Tampilkan detail LENGKAP untuk 1 baris (LOP) saja, dengan tombol "kembali
+// ke daftar" supaya bisa balik lagi ke list sebelumnya (dipakai saat user
+// klik salah satu baris di dalam daftar hasil klik card/status/region).
+function showSingleRowFullDetail(row) {
+  if (!row) return;
+  const fields = Object.keys(row);
+  const content = fields.map((key) => {
+    return `<div style="margin-bottom:8px;"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(row[key])}</div>`;
+  }).join("");
+  updateModalContent(`
+    <button id="backToListBtn" style="margin-bottom:14px;">← Kembali ke daftar</button>
+    <div>${content}</div>
+  `);
+  const backBtn = document.getElementById("backToListBtn");
+  if (backBtn) {
+    backBtn.onclick = () => {
+      if (modalPageState) renderModalRowsPage(modalPageState.page);
+    };
+  }
+}
+
+// Delegasi klik untuk baris di dalam daftar modal (list LOP) supaya bisa
+// dibuka lagi -> tampilkan seluruh isi baris itu.
+document.getElementById("modalContent").addEventListener("click", (e) => {
+  const tr = e.target.closest(".modal-row-clickable");
+  if (!tr || !modalPageState) return;
+  const idx = Number(tr.dataset.modalRowIdx);
+  if (!Number.isFinite(idx)) return;
+  showSingleRowFullDetail(modalPageState.rows[idx]);
+});
+
+// Ambil & tampilkan daftar LOP untuk 1 kategori di halaman Tree Diagram MBB
+// (root Site ID, cabang L1 On Air/NY On Air/Drop, sub-status funnel, sel
+// tabel pivot region, atau kartu Resume L0 Ready per Region).
+// Parser angka Rupiah simpel di sisi client (mirror dari server), dipakai
+// buat sort baris waktu kartu Nilai PO/BoQ/Comcase diklik.
+function parseRupiahNumberClient(val) {
+  if (val === null || val === undefined || val === "") return 0;
+  if (typeof val === "number") return val;
+  const cleaned = String(val).replace(/[^0-9,.\-]/g, "");
+  if (!cleaned) return 0;
+  const normalized = cleaned.replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".");
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+async function openMbbDetail({ type, status, region, title, sortColumn, sortLabel }) {
+  const label = title || status || type;
+  openModal(
+    label,
+    "Sheet: MBB",
+    `<div class="loading">Memuat daftar LOP...</div>`,
+    [{ label: "Tutup", className: "", onClick: closeModal }]
+  );
+  try {
+    const qs = new URLSearchParams();
+    qs.set("type", type);
+    if (status) qs.set("status", status);
+    if (region) qs.set("region", region);
+    const res = await fetch(`/api/mbb-tree-rows?${qs.toString()}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+
+    let rows = json.rows || [];
+    const columns = json.columns || [];
+
+    let sortNote = "";
+    if (sortColumn && rows.length > 0) {
+      rows = rows.slice().sort((a, b) => parseRupiahNumberClient(b[sortColumn]) - parseRupiahNumberClient(a[sortColumn]));
+      sortNote = ` · diurutkan dari <strong>${escapeHtml(sortLabel || sortColumn)}</strong> terbesar`;
+    }
+
+    const regionNote = region ? ` · Region <strong>${escapeHtml(region)}</strong>` : "";
+    const header = `<p>${escapeHtml(label)}${regionNote}${sortNote} — <strong>${rows.length}</strong> LOP:</p>`;
+
+    if (rows.length === 0) {
+      updateModalContent(`${header}<div class="empty">Tidak ada baris untuk kategori ini${type === "drop" ? " (baris Drop sudah dibuang dari data sumber)." : "."}</div>`);
+    } else {
+      prepareModalRowsPagination(rows, columns, header, { clickable: true });
+    }
+    document.getElementById("modalMeta").textContent = `Sheet: MBB · ${rows.length} baris`;
+  } catch (err) {
+    updateModalContent(`<div class="error">⚠️ Gagal memuat daftar LOP: ${escapeHtml(err.message)}</div>`);
+  }
 }
 
 async function applyFilterAndLoad(column, value) {
@@ -1640,7 +1919,7 @@ async function openStatusDetails(status, count, sheet) {
 
     const actions = [{ label: "Tutup", className: "", onClick: closeModal }];
     const header = `<p>Baris dengan status <strong>${escapeHtml(status)}</strong> di sheet <strong>${escapeHtml(sheet)}</strong> (${rows.length} baris):</p>`;
-    prepareModalRowsPagination(rows, columns, header);
+    prepareModalRowsPagination(rows, columns, header, { clickable: true });
     // prepareModalRowsPagination sudah update modalContent; tapi title/meta &
     // actions dari openModal di atas tetap dipakai, jadi cukup panggil ulang
     // openModal sekali lagi untuk pasang actions & meta yang final.
@@ -1945,9 +2224,71 @@ document.getElementById("refreshBtn").onclick = () => {
     loadSummary(true);
   } else {
     loadAll(true);
-    if (currentSheet === "MBB") loadMbbTree(true);
+    if (currentSheet === "MBB") { loadMbbTree(true); loadMbbNotes(); }
   }
 };
+
+// ---- Klik-able: tabel pivot "Status Pekerjaan / Record Count per Region" ----
+document.getElementById("mbbPivotTable").addEventListener("click", (e) => {
+  const cell = e.target.closest("td");
+  if (!cell) return;
+  if (cell.classList.contains("pivot-cell")) {
+    const status = cell.dataset.status;
+    const region = cell.dataset.region || "";
+    openMbbDetail({ type: "status", status, region: region || undefined, title: friendlyStatusLabel(status) });
+  } else if (cell.classList.contains("pivot-region") || cell.classList.contains("pivot-region-total")) {
+    const region = cell.dataset.region;
+    openMbbDetail({ type: "region", region, title: `Region ${region}` });
+  } else if (cell.classList.contains("pivot-all-total")) {
+    openMbbDetail({ type: "total", title: "Site ID (Semua LOP)" });
+  }
+});
+
+// ---- Catatan / Notes MBB (tersimpan di server, shared) ----
+async function loadMbbNotes() {
+  try {
+    const res = await fetch("/api/mbb-notes");
+    const json = await res.json();
+    const ta = document.getElementById("mbbNotesTextarea");
+    if (ta && document.activeElement !== ta) ta.value = json.notes || "";
+    updateMbbNotesStatus(json.updatedAt);
+  } catch (err) {
+    console.error("Gagal memuat catatan MBB:", err);
+  }
+}
+
+function updateMbbNotesStatus(updatedAt) {
+  const el = document.getElementById("mbbNotesStatus");
+  if (!el) return;
+  el.textContent = updatedAt
+    ? `Tersimpan terakhir: ${new Date(updatedAt).toLocaleString("id-ID")}`
+    : "Belum ada catatan tersimpan.";
+}
+
+async function saveMbbNotes() {
+  const ta = document.getElementById("mbbNotesTextarea");
+  const btn = document.getElementById("mbbNotesSaveBtn");
+  if (!ta || !btn) return;
+  btn.disabled = true;
+  btn.textContent = "Menyimpan...";
+  try {
+    const res = await fetch("/api/mbb-notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: ta.value }),
+    });
+    const json = await res.json();
+    if (json.error) throw new Error(json.error);
+    updateMbbNotesStatus(json.updatedAt);
+  } catch (err) {
+    alert("Gagal menyimpan catatan: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Simpan Catatan";
+  }
+}
+
+document.getElementById("mbbNotesSaveBtn").addEventListener("click", saveMbbNotes);
 filterColumnSelect.onchange = () => {
   const col = filterColumnSelect.value;
   filterColumnSelect.value = "";
@@ -1993,6 +2334,7 @@ if (currentSheet === SUMMARY_KEY) {
   if (currentSheet === "MBB") {
     mbbTreeViewEl.style.display = "block";
     loadMbbTree();
+    loadMbbNotes();
   }
 }
 
