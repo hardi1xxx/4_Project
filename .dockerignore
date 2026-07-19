@@ -1,0 +1,12 @@
+node_modules
+.git
+.venv
+venv
+Include
+Lib
+Scripts
+pyvenv.cfg
+*.pyc
+__pycache__
+.env
+data
