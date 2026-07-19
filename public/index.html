@@ -719,6 +719,26 @@
   .modal-row-clickable { cursor: pointer; }
   .modal-row-clickable:hover { background: var(--accent-soft); }
 
+  /* --- Detail LOP: field bisa diedit + tombol simpan ke Google Sheets --- */
+  .row-edit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; max-height: 420px; overflow: auto; padding-right: 4px; }
+  .row-edit-field { display: flex; flex-direction: column; gap: 3px; }
+  .row-edit-field label { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .02em; }
+  .row-edit-field input {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 9px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--text);
+    background: var(--panel-soft);
+  }
+  .row-edit-field input:focus { outline: none; border-color: var(--accent); }
+  .row-edit-field input[readonly] { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .row-edit-field.changed input { border-color: #f59e0b; background: #fffbeb; }
+  .row-edit-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .row-edit-status { font-size: 12px; }
+  .row-edit-note { font-size: 11.5px; color: var(--muted); margin-bottom: 10px; }
+
   .mbb-empty-note { font-size: 12px; color: var(--muted); padding: 10px 0; }
 
   /* --- Tabel pivot region --- */
@@ -1766,7 +1786,7 @@ function renderModalRowsPage(page) {
 }
 
 function prepareModalRowsPagination(rows, columns, headerHtml, opts = {}) {
-  modalPageState = { rows, columns, page: 0, headerHtml, clickable: !!opts.clickable };
+  modalPageState = { rows, columns, page: 0, headerHtml, clickable: !!opts.clickable, sheet: opts.sheet || currentSheet };
   renderModalRowsPage(0);
 }
 
@@ -1786,18 +1806,132 @@ function renderRowsAsTable(columns, rows, opts = {}) {
   return `<div style="overflow:auto;max-height:260px;"><table style="width:100%;border-collapse:collapse;"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
-// Tampilkan detail LENGKAP untuk 1 baris (LOP) saja, dengan tombol "kembali
-// ke daftar" supaya bisa balik lagi ke list sebelumnya (dipakai saat user
-// klik salah satu baris di dalam daftar hasil klik card/status/region).
-function showSingleRowFullDetail(row) {
-  if (!row) return;
+// Cache status "siap tulis ke Google Sheets" (dari /api/sheets-write-status),
+// null = belum pernah dicek. Dicek sekali lalu dipakai ulang.
+let mbbWriteReady = null;
+
+async function checkSheetsWriteReady() {
+  if (mbbWriteReady !== null) return mbbWriteReady;
+  try {
+    const res = await fetch("/api/sheets-write-status");
+    const json = await res.json();
+    mbbWriteReady = !!json.ready;
+  } catch (err) {
+    mbbWriteReady = false;
+  }
+  return mbbWriteReady;
+}
+
+// Bangun form field yang BISA DIEDIT untuk 1 baris (LOP). Kolom "SITE ID"
+// dibuat read-only karena dipakai sebagai kunci pencocokan baris di
+// Google Sheets — kalau nilainya diubah, sistem jadi tidak tahu baris mana
+// yang harus diupdate.
+function renderEditableRowFields(row, sheet) {
   const fields = Object.keys(row);
-  const content = fields.map((key) => {
-    return `<div style="margin-bottom:8px;"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(row[key])}</div>`;
+  const siteIdCol = fields.find((f) => f.trim().toUpperCase() === "SITE ID");
+  const fieldsHtml = fields.map((key) => {
+    const val = row[key] ?? "";
+    const isSiteId = key === siteIdCol;
+    return `
+      <div class="row-edit-field">
+        <label>${escapeHtml(key)}${isSiteId ? " 🔒" : ""}</label>
+        <input type="text" class="row-edit-input" data-field="${escapeHtml(key)}" value="${escapeHtml(val)}" ${isSiteId ? "readonly title=\"Kunci pencocokan baris, tidak bisa diedit\"" : ""} />
+      </div>
+    `;
   }).join("");
+  return `
+    <div class="row-edit-note">✏️ Ubah field yang perlu, lalu klik "Simpan Perubahan" — akan langsung tersimpan ke Google Sheets asli (sheet ${escapeHtml(sheet)}).</div>
+    <div class="row-edit-grid">${fieldsHtml}</div>
+    <div class="row-edit-actions">
+      <button id="rowEditSaveBtn" class="primary">💾 Simpan Perubahan</button>
+      <span id="rowEditStatus" class="row-edit-status"></span>
+    </div>
+  `;
+}
+
+function renderReadonlyRowFields(row) {
+  const fields = Object.keys(row);
+  return fields.map((key) => `<div style="margin-bottom:8px;"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(row[key])}</div>`).join("");
+}
+
+// Pasang handler tombol "Simpan Perubahan" -> kirim field yang berubah ke
+// /api/update-row, yang menulis balik langsung ke Google Sheets asli
+// (dicocokkan lewat SITE ID).
+function wireRowEditSave(row, sheet, container) {
+  const btn = container.querySelector("#rowEditSaveBtn");
+  const statusEl = container.querySelector("#rowEditStatus");
+  if (!btn) return;
+  const fields = Object.keys(row);
+  const siteIdCol = fields.find((f) => f.trim().toUpperCase() === "SITE ID");
+
+  container.querySelectorAll(".row-edit-input").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const field = inp.dataset.field;
+      const changed = String(inp.value) !== String(row[field] ?? "");
+      inp.closest(".row-edit-field").classList.toggle("changed", changed);
+    });
+  });
+
+  btn.onclick = async () => {
+    if (!siteIdCol) {
+      statusEl.textContent = "⚠️ Sheet ini tidak punya kolom SITE ID, tidak bisa diupdate otomatis.";
+      statusEl.style.color = "var(--red)";
+      return;
+    }
+    const updates = {};
+    container.querySelectorAll(".row-edit-input").forEach((inp) => {
+      const field = inp.dataset.field;
+      if (field === siteIdCol) return;
+      const newVal = inp.value;
+      if (String(newVal) !== String(row[field] ?? "")) updates[field] = newVal;
+    });
+    if (Object.keys(updates).length === 0) {
+      statusEl.textContent = "Tidak ada perubahan untuk disimpan.";
+      statusEl.style.color = "var(--muted)";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "Menyimpan...";
+    statusEl.textContent = "";
+    try {
+      const res = await fetch("/api/update-row", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sheet, siteId: row[siteIdCol], updates }),
+      });
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
+      Object.keys(updates).forEach((f) => { row[f] = updates[f]; });
+      container.querySelectorAll(".row-edit-field.changed").forEach((el) => el.classList.remove("changed"));
+      statusEl.textContent = `✅ Tersimpan ke Google Sheets (${(json.updatedColumns || []).length} kolom).`;
+      statusEl.style.color = "var(--green)";
+      if (json.notFoundColumns && json.notFoundColumns.length) {
+        statusEl.textContent += ` Kolom tidak ditemukan: ${json.notFoundColumns.join(", ")}.`;
+      }
+    } catch (err) {
+      statusEl.textContent = "⚠️ Gagal menyimpan: " + err.message;
+      statusEl.style.color = "var(--red)";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "💾 Simpan Perubahan";
+    }
+  };
+}
+
+// Tampilkan detail LENGKAP untuk 1 baris (LOP) saja — bisa diedit & disimpan
+// langsung ke Google Sheets — dengan tombol "kembali ke daftar" supaya bisa
+// balik lagi ke list sebelumnya (dipakai saat user klik salah satu baris di
+// dalam daftar hasil klik card/status/region).
+async function showSingleRowFullDetail(row) {
+  if (!row) return;
+  const sheet = (modalPageState && modalPageState.sheet) || currentSheet;
+  const writeReady = await checkSheetsWriteReady();
+  const fieldsHtml = writeReady
+    ? renderEditableRowFields(row, sheet)
+    : `${renderReadonlyRowFields(row)}<div class="row-edit-note" style="margin-top:10px;">ℹ️ Fitur simpan-ke-Google-Sheets belum aktif di server ini (lihat README untuk setup Service Account).</div>`;
   updateModalContent(`
     <button id="backToListBtn" style="margin-bottom:14px;">← Kembali ke daftar</button>
-    <div>${content}</div>
+    <div>${fieldsHtml}</div>
   `);
   const backBtn = document.getElementById("backToListBtn");
   if (backBtn) {
@@ -1805,6 +1939,7 @@ function showSingleRowFullDetail(row) {
       if (modalPageState) renderModalRowsPage(modalPageState.page);
     };
   }
+  if (writeReady) wireRowEditSave(row, sheet, document.getElementById("modalContent"));
 }
 
 // Delegasi klik untuk baris di dalam daftar modal (list LOP) supaya bisa
@@ -1866,7 +2001,7 @@ async function openMbbDetail({ type, status, region, title, sortColumn, sortLabe
     if (rows.length === 0) {
       updateModalContent(`${header}<div class="empty">Tidak ada baris untuk kategori ini${type === "drop" ? " (baris Drop sudah dibuang dari data sumber)." : "."}</div>`);
     } else {
-      prepareModalRowsPagination(rows, columns, header, { clickable: true });
+      prepareModalRowsPagination(rows, columns, header, { clickable: true, sheet: "MBB" });
     }
     document.getElementById("modalMeta").textContent = `Sheet: MBB · ${rows.length} baris`;
   } catch (err) {
@@ -1919,11 +2054,12 @@ function closeModal() {
   backdrop.classList.remove("open");
 }
 
-function showRowDetails(row, column) {
-  const fields = Object.keys(row || {});
-  const content = fields.map((key) => {
-    return `<div style="margin-bottom:8px;"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(row[key])}</div>`;
-  }).join("");
+async function showRowDetails(row, column) {
+  const sheet = currentSheet;
+  const writeReady = await checkSheetsWriteReady();
+  const fieldsHtml = writeReady
+    ? renderEditableRowFields(row, sheet)
+    : `${renderReadonlyRowFields(row)}<div class="row-edit-note" style="margin-top:10px;">ℹ️ Fitur simpan-ke-Google-Sheets belum aktif di server ini (lihat README untuk setup Service Account).</div>`;
   const actions = [];
   const normalized = String(column || "").toLowerCase();
   let relatedHtml = "";
@@ -1937,7 +2073,7 @@ function showRowDetails(row, column) {
       label: `Tampilkan semua baris terkait ${escapeHtml(column)}`,
       className: "",
       onClick: () => {
-        prepareModalRowsPagination(allMatches, currentColumns, `<div>${content}</div><div style="margin-top:16px;"><strong>Semua baris terkait ${escapeHtml(column)}:</strong></div>`);
+        prepareModalRowsPagination(allMatches, currentColumns, `<div>${fieldsHtml}</div><div style="margin-top:16px;"><strong>Semua baris terkait ${escapeHtml(column)}:</strong></div>`, { sheet, clickable: true });
       },
     });
   }
@@ -1945,9 +2081,10 @@ function showRowDetails(row, column) {
   openModal(
     `Detail baris ${column ? `- ${column}` : ""}`,
     `Sheet: ${currentSheet}`,
-    `<div>${content}</div>${relatedHtml}`,
+    `<div>${fieldsHtml}</div>${relatedHtml}`,
     actions
   );
+  if (writeReady) wireRowEditSave(row, sheet, document.getElementById("modalContent"));
 }
 
 async function openStatusDetails(status, count, sheet) {
@@ -1974,8 +2111,7 @@ async function openStatusDetails(status, count, sheet) {
 
     const actions = [{ label: "Tutup", className: "", onClick: closeModal }];
     const header = `<p>Baris dengan status <strong>${escapeHtml(status)}</strong> di sheet <strong>${escapeHtml(sheet)}</strong> (${rows.length} baris):</p>`;
-    prepareModalRowsPagination(rows, columns, header, { clickable: true });
-    // prepareModalRowsPagination sudah update modalContent; tapi title/meta &
+    prepareModalRowsPagination(rows, columns, header, { clickable: true, sheet });
     // actions dari openModal di atas tetap dipakai, jadi cukup panggil ulang
     // openModal sekali lagi untuk pasang actions & meta yang final.
     document.getElementById("modalMeta").textContent = `Sheet: ${sheet} · ${rows.length} baris`;

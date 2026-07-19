@@ -4,6 +4,7 @@ const { parse } = require("csv-parse/sync");
 const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
+const { google } = require("googleapis");
 
 const app = express();
 app.use(cors());
@@ -1297,6 +1298,173 @@ app.post("/api/mbb-notes", (req, res) => {
     fs.writeFileSync(NOTES_FILE, JSON.stringify(data, null, 2));
     res.json(data);
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// TULIS BALIK KE GOOGLE SHEETS (UPDATE BARIS LOP DARI WEB)
+// ============================================================
+// Butuh Service Account Google Cloud (lihat panduan setup di README).
+// Kredensialnya disimpan sebagai 1 environment variable:
+//   GOOGLE_SERVICE_ACCOUNT_JSON = isi lengkap file credential JSON
+// Spreadsheet harus di-share ke email service account itu dengan akses
+// "Editor", supaya endpoint ini bisa menulis balik ke sheet aslinya.
+// ============================================================
+
+let sheetsClientPromise = null;
+
+function indexToColLetter(idx) {
+  let n = idx + 1;
+  let s = "";
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+function invalidateSheetCache(sheetName) {
+  cache.lastFetch[sheetName] = 0;
+}
+
+// Bikin & cache 1 client Sheets API terautentikasi (dipakai ulang antar
+// request, tidak perlu login ulang tiap kali).
+function getSheetsClient() {
+  if (sheetsClientPromise) return sheetsClientPromise;
+
+  sheetsClientPromise = (async () => {
+    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+    if (!raw) {
+      throw new Error(
+        "GOOGLE_SERVICE_ACCOUNT_JSON belum di-set di environment variable Railway. " +
+          "Lihat panduan setup Service Account di README."
+      );
+    }
+    let credentials;
+    try {
+      credentials = JSON.parse(raw);
+    } catch (e) {
+      throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON isinya bukan JSON yang valid: " + e.message);
+    }
+    const auth = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    });
+    const client = await auth.getClient();
+    return google.sheets({ version: "v4", auth: client });
+  })();
+
+  // Kalau gagal, jangan cache promise yang reject, supaya request berikutnya
+  // bisa coba lagi (mis. kalau env var baru saja ditambahkan lalu di-redeploy).
+  sheetsClientPromise.catch(() => {
+    sheetsClientPromise = null;
+  });
+
+  return sheetsClientPromise;
+}
+
+// Cek cepat apakah fitur update sudah siap dipakai (dipanggil frontend
+// waktu buka detail LOP, buat nentuin apakah tombol "Simpan Perubahan"
+// ditampilkan atau tidak).
+app.get("/api/sheets-write-status", async (req, res) => {
+  try {
+    await getSheetsClient();
+    res.json({ ready: true });
+  } catch (err) {
+    res.json({ ready: false, reason: err.message });
+  }
+});
+
+// Update 1 baris LOP di SHEET APAPUN berdasarkan SITE ID, langsung ke
+// Google Sheets aslinya (bukan cuma cache di server). Dipakai oleh tombol
+// "Simpan Perubahan" di halaman detail LOP, berlaku untuk semua sheet
+// (MBB, OLO, HEM, FBB, PT2, QE) selama sheet itu punya kolom "SITE ID".
+//
+// body: { sheet: "MBB", siteId: "...", updates: { "Nama Kolom Persis": "nilai baru", ... } }
+app.post("/api/update-row", async (req, res) => {
+  try {
+    const { sheet, siteId, updates } = req.body || {};
+    const sheetName = String(sheet || "").trim().toUpperCase();
+    if (!sheetName || !SHEET_NAMES.includes(sheetName)) {
+      return res.status(400).json({ error: `Sheet "${sheet}" tidak dikenali. Pilihan: ${SHEET_NAMES.join(", ")}.` });
+    }
+    if (!siteId || !String(siteId).trim()) {
+      return res.status(400).json({ error: "SITE ID wajib diisi untuk tahu baris mana yang diupdate." });
+    }
+    if (!updates || typeof updates !== "object" || Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "Tidak ada perubahan yang dikirim." });
+    }
+
+    const sheets = await getSheetsClient();
+
+    // Ambil data TERBARU langsung dari Sheets API (bukan cache CSV), supaya
+    // nomor baris & posisi kolom akurat waktu ditulis balik.
+    const getRes = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${sheetName}!A1:ZZ`,
+    });
+    const values = getRes.data.values || [];
+    if (values.length === 0) {
+      return res.status(404).json({ error: `Sheet "${sheetName}" kosong atau tidak ditemukan.` });
+    }
+
+    const headerRow = values[0];
+    const siteIdColIdx = headerRow.findIndex((h) => normalizeKey(h) === "SITE ID");
+    if (siteIdColIdx === -1) {
+      return res.status(500).json({ error: `Kolom "SITE ID" tidak ditemukan di baris header sheet ${sheetName}, jadi tidak bisa dipastikan baris mana yang diupdate.` });
+    }
+
+    let targetRowIdx = -1; // index di array `values` (0 = header)
+    for (let i = 1; i < values.length; i++) {
+      if (String((values[i] || [])[siteIdColIdx] || "").trim() === String(siteId).trim()) {
+        targetRowIdx = i;
+        break;
+      }
+    }
+    if (targetRowIdx === -1) {
+      return res.status(404).json({ error: `SITE ID "${siteId}" tidak ditemukan di sheet ${sheetName} (mungkin sudah berubah/dihapus, coba refresh dulu).` });
+    }
+    const rowNumber = targetRowIdx + 1; // nomor baris asli di spreadsheet (1-based)
+
+    const dataUpdates = [];
+    const notFoundColumns = [];
+    for (const [colName, newVal] of Object.entries(updates)) {
+      const colIdx = headerRow.findIndex((h) => String(h || "").trim() === String(colName).trim());
+      if (colIdx === -1) {
+        notFoundColumns.push(colName);
+        continue;
+      }
+      dataUpdates.push({
+        range: `${sheetName}!${indexToColLetter(colIdx)}${rowNumber}`,
+        values: [[newVal === null || newVal === undefined ? "" : String(newVal)]],
+      });
+    }
+
+    if (dataUpdates.length === 0) {
+      return res.status(400).json({ error: "Tidak ada kolom valid untuk diupdate.", notFoundColumns });
+    }
+
+    await sheets.spreadsheets.values.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { valueInputOption: "USER_ENTERED", data: dataUpdates },
+    });
+
+    // Buang cache sheet ini supaya bacaan berikutnya (dashboard, tree, dst)
+    // ambil data yang sudah ter-update, bukan versi lama dari cache 1 jam.
+    invalidateSheetCache(sheetName);
+
+    res.json({
+      success: true,
+      sheet: sheetName,
+      siteId,
+      rowNumber,
+      updatedColumns: Object.keys(updates).filter((c) => !notFoundColumns.includes(c)),
+      notFoundColumns: notFoundColumns.length ? notFoundColumns : undefined,
+    });
+  } catch (err) {
+    console.error("Gagal update baris:", err);
     res.status(500).json({ error: err.message });
   }
 });

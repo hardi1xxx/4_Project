@@ -92,7 +92,44 @@ Diset di `server.js` pada variabel `STATUS_COLUMN`:
 
 Kalau nama kolom di spreadsheet berbeda penulisannya (typo/spasi), update nilai di `STATUS_COLUMN` agar kartu & grafik bisa baca datanya dengan benar.
 
-## Endpoint API (kalau ingin diintegrasikan ke tempat lain)
+## ✏️ Fitur Update Data dari Web (tulis balik ke Google Sheets)
+
+Sekarang di halaman detail LOP ada tombol **"💾 Simpan Perubahan"** — field yang diedit di web akan langsung tersimpan ke Google Sheets aslinya (dicocokkan lewat kolom **SITE ID**, jadi kolom itu sendiri tidak bisa diedit).
+
+Fitur ini butuh **Google Service Account** (akun khusus untuk aplikasi, beda dari akun Google pribadi) karena metode CSV publik yang dipakai untuk membaca data sifatnya **read-only**. Berikut langkah bikin dari awal:
+
+### 1. Buat project & aktifkan Google Sheets API
+1. Buka https://console.cloud.google.com/ → login pakai akun Google kamu.
+2. Klik dropdown project di kiri atas → **New Project** → kasih nama bebas (mis. "monitoring-dashboard") → **Create**.
+3. Pastikan project barusan aktif (cek dropdown kiri atas).
+4. Buka menu **APIs & Services → Library**, cari **"Google Sheets API"**, klik, lalu klik **Enable**.
+
+### 2. Buat Service Account
+1. Masih di **APIs & Services**, buka **Credentials** (menu kiri).
+2. Klik **+ Create Credentials → Service account**.
+3. Isi nama bebas (mis. "dashboard-writer") → **Create and Continue** → role boleh di-skip (Continue) → **Done**.
+4. Di halaman Credentials, klik service account yang baru dibuat.
+5. Buka tab **Keys** → **Add Key → Create new key** → pilih **JSON** → **Create**.
+6. File `.json` otomatis ke-download — **simpan baik-baik, jangan di-share/commit ke GitHub**.
+
+### 3. Share spreadsheet ke Service Account
+1. Buka file JSON tadi, cari field `"client_email"` — copy alamat emailnya (formatnya seperti `xxx@xxx.iam.gserviceaccount.com`).
+2. Buka Google Sheets sumber data dashboard ini → klik **Share** (kanan atas).
+3. Paste email tadi, set akses ke **Editor**, lalu **Send/Share**.
+
+### 4. Pasang credential-nya di Railway
+1. Buka project Railway → tab **Variables**.
+2. Tambah variable baru:
+   - Name: `GOOGLE_SERVICE_ACCOUNT_JSON`
+   - Value: **buka file JSON tadi pakai text editor, copy SELURUH isinya (dari `{` sampai `}`), paste apa adanya** (Railway support value multi-baris).
+3. Save → Railway otomatis redeploy.
+
+### 5. Cek apakah sudah aktif
+Buka `https://<domain-railway-kamu>/api/sheets-write-status` di browser. Kalau muncul `{"ready":true}`, fitur update sudah aktif. Kalau `{"ready":false,...}`, baca pesan `reason`-nya (biasanya berarti env var belum ke-set atau JSON-nya tidak valid).
+
+**Catatan keamanan:** siapa pun yang bisa buka dashboard ini otomatis bisa mengedit data (belum ada login/otorisasi user per-role). Kalau nanti perlu dibatasi siapa saja yang boleh edit kolom apa saja, kasih tau — bisa ditambahkan.
+
+
 
 | Endpoint | Keterangan |
 |---|---|
@@ -100,6 +137,9 @@ Kalau nama kolom di spreadsheet berbeda penulisannya (typo/spasi), update nilai 
 | `GET /api/data/:sheet?search=...&filter_KolomX=NilaiY` | Data sheet + search + filter |
 | `GET /api/options/:sheet/:column` | Daftar nilai unik suatu kolom (untuk dropdown filter) |
 | `GET /api/summary` | Ringkasan jumlah baris tiap sheet |
+| `GET /api/mbb-notes` / `POST /api/mbb-notes` | Baca / simpan Catatan di halaman Tree Diagram MBB |
+| `GET /api/sheets-write-status` | Cek apakah fitur update-ke-Sheets sudah aktif |
+| `POST /api/update-row` | Update 1 baris (LOP) di sheet manapun berdasarkan SITE ID, langsung ke Google Sheets asli |
 | `GET /health` | Health check |
 
 ## Troubleshooting
