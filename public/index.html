@@ -689,6 +689,17 @@
   }
   .mbb-notes-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
   .mbb-notes-status { font-size: 11.5px; color: var(--muted); }
+  .mbb-juli-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text);
+    cursor: pointer;
+    margin-bottom: 8px;
+  }
+  .mbb-juli-toggle input { cursor: pointer; }
 
   /* --- Panel kanan (versi ringkas + RFI flow) --- */
   .status-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
@@ -806,6 +817,10 @@
 
         <div class="mbb-panel">
           <h3>RFI Flow — Tree Diagram</h3>
+          <label class="mbb-juli-toggle">
+            <input type="checkbox" id="mbbRfiJuliToggle" />
+            🎯 Hanya Target Juli
+          </label>
           <div id="mbbCenterTreeContent"></div>
         </div>
       </div>
@@ -1204,6 +1219,7 @@ function formatJuta(n) {
 }
 
 function friendlyStatusLabel(status) {
+  if (status === "__KENDALA__") return "Hold";
   return String(status || "").replace(/^\d+(\.\d+)*\s*/, "").trim() || status;
 }
 
@@ -1230,6 +1246,58 @@ async function loadMbbTree(forceRefresh = false) {
     console.error("Gagal memuat data tree MBB:", err);
     document.getElementById("mbbTreeContent").innerHTML = `<div class="error">⚠️ Gagal memuat data: ${escapeHtml(err.message)}</div>`;
   }
+}
+
+// Data mentah (belum difilter Target Juli) hasil /api/mbb-tree terakhir,
+// dipakai ulang waktu toggle "Hanya Target Juli" di panel RFI Flow
+// dimatikan (supaya tidak perlu fetch ulang).
+let mbbTreeBaseData = null;
+
+// Render ulang KHUSUS panel "RFI Flow — Tree Diagram" sesuai state toggle
+// "Hanya Target Juli". Tree diagram utama (kiri) dan kartu-kartu lain TIDAK
+// ikut terfilter — cuma panel RFI Flow ini yang punya filter sendiri.
+async function refreshMbbRfiFlowTree() {
+  const toggle = document.getElementById("mbbRfiJuliToggle");
+  const juliOnly = !!(toggle && toggle.checked);
+  let data = mbbTreeBaseData;
+  if (juliOnly) {
+    try {
+      const res = await fetch("/api/mbb-tree?julyOnly=1");
+      const json = await res.json();
+      if (!json.error) data = json;
+    } catch (err) {
+      console.error("Gagal memuat data RFI Flow (Target Juli):", err);
+    }
+  }
+  if (!data) return;
+  renderMbbRfiFlowTree(data, juliOnly);
+}
+
+function renderMbbRfiFlowTree(data, juliOnly) {
+  const funnel = data.funnelBreakdown || [];
+  const leftLeaves = funnel.map((item) => ({
+    label: friendlyStatusLabel(item.status),
+    value: item.count,
+    onClick: () => openMbbDetail({ type: "status", status: item.status, title: friendlyStatusLabel(item.status), juliOnly }),
+  }));
+  renderCenterFlowTree(document.getElementById("mbbCenterTreeContent"), {
+    center: {
+      label: "Site ID",
+      value: data.total,
+      onClick: () => openMbbDetail({ type: "total", title: "Site ID (Semua LOP)", juliOnly }),
+    },
+    leftBranch: {
+      label: "NY RFI",
+      value: data.nyOnAir - data.l1ReadyCount,
+      onClick: () => openMbbDetail({ type: "nyrfi", title: "NY RFI", juliOnly }),
+    },
+    rightBranch: {
+      label: "RFI",
+      value: data.l1OnAirCombined,
+      onClick: () => openMbbDetail({ type: "onair_combined", title: "RFI (L1 - On Air)", juliOnly }),
+    },
+    leftLeaves,
+  });
 }
 
 function renderMbbTree(data) {
@@ -1303,25 +1371,10 @@ function renderMbbTree(data) {
   });
 
   // ---- Panel kanan: tree diagram RFI Flow (Site ID di tengah, NY RFI di
-  // kiri dengan breakdown funnel, RFI/L1-On Air di kanan) ----
-  renderCenterFlowTree(document.getElementById("mbbCenterTreeContent"), {
-    center: {
-      label: "Site ID",
-      value: data.total,
-      onClick: () => openMbbDetail({ type: "total", title: "Site ID (Semua LOP)" }),
-    },
-    leftBranch: {
-      label: "NY RFI",
-      value: data.nyOnAir - data.l1ReadyCount,
-      onClick: () => openMbbDetail({ type: "nyrfi", title: "NY RFI" }),
-    },
-    rightBranch: {
-      label: "RFI",
-      value: data.l1OnAirCombined,
-      onClick: () => openMbbDetail({ type: "onair_combined", title: "RFI (L1 - On Air)" }),
-    },
-    leftLeaves: treeLeaves,
-  });
+  // kiri dengan breakdown funnel, RFI/L1-On Air di kanan). Punya toggle
+  // "Hanya Target Juli" sendiri, terpisah dari tree diagram utama. ----
+  mbbTreeBaseData = data;
+  refreshMbbRfiFlowTree();
 
   // Samakan tinggi kotak Catatan dengan tinggi tree diagram (kiri), supaya
   // panjangnya sama walau jumlah kategori berubah-ubah.
@@ -1779,7 +1832,7 @@ function parseRupiahNumberClient(val) {
   return Number.isFinite(n) ? n : 0;
 }
 
-async function openMbbDetail({ type, status, region, title, sortColumn, sortLabel }) {
+async function openMbbDetail({ type, status, region, title, sortColumn, sortLabel, juliOnly }) {
   const label = title || status || type;
   openModal(
     label,
@@ -1792,6 +1845,7 @@ async function openMbbDetail({ type, status, region, title, sortColumn, sortLabe
     qs.set("type", type);
     if (status) qs.set("status", status);
     if (region) qs.set("region", region);
+    if (juliOnly) qs.set("julyOnly", "1");
     const res = await fetch(`/api/mbb-tree-rows?${qs.toString()}`);
     const json = await res.json();
     if (json.error) throw new Error(json.error);
@@ -1806,7 +1860,8 @@ async function openMbbDetail({ type, status, region, title, sortColumn, sortLabe
     }
 
     const regionNote = region ? ` · Region <strong>${escapeHtml(region)}</strong>` : "";
-    const header = `<p>${escapeHtml(label)}${regionNote}${sortNote} — <strong>${rows.length}</strong> LOP:</p>`;
+    const juliNote = juliOnly ? ` · <strong>Hanya Target Juli</strong>` : "";
+    const header = `<p>${escapeHtml(label)}${regionNote}${juliNote}${sortNote} — <strong>${rows.length}</strong> LOP:</p>`;
 
     if (rows.length === 0) {
       updateModalContent(`${header}<div class="empty">Tidak ada baris untuk kategori ini${type === "drop" ? " (baris Drop sudah dibuang dari data sumber)." : "."}</div>`);
@@ -2289,6 +2344,9 @@ async function saveMbbNotes() {
 }
 
 document.getElementById("mbbNotesSaveBtn").addEventListener("click", saveMbbNotes);
+
+// ---- Toggle "Hanya Target Juli" khusus panel RFI Flow — Tree Diagram ----
+document.getElementById("mbbRfiJuliToggle").addEventListener("change", refreshMbbRfiFlowTree);
 filterColumnSelect.onchange = () => {
   const col = filterColumnSelect.value;
   filterColumnSelect.value = "";

@@ -1012,7 +1012,7 @@ app.get("/api/stats-all", async (req, res) => {
 // grafik Resume/Issue Analytics.
 app.get("/api/mbb-tree", async (req, res) => {
   try {
-    const rows = await getSheetData("MBB");
+    const allRows = await getSheetData("MBB");
     const headers = await getSheetHeaders("MBB");
 
     const colAt = (letter) => {
@@ -1027,7 +1027,18 @@ app.get("/api/mbb-tree", async (req, res) => {
     const juliCol = colAt(MBB_JULI_LETTER);
     const statusColName =
       colAt(STATUS_COLUMN_LETTER.MBB) ||
-      resolveStatusColumn("MBB", rows, STATUS_COLUMN.MBB, headers);
+      resolveStatusColumn("MBB", allRows, STATUS_COLUMN.MBB, headers);
+
+    // Filter opsional: hanya baris yang masuk Target Juli (dipakai khusus
+    // untuk panel "RFI Flow — Tree Diagram" waktu toggle "Target Juli"
+    // dinyalakan). Tidak mempengaruhi endpoint ini kalau query tidak dikirim.
+    const julyOnly = req.query.julyOnly === "1";
+    const rows = julyOnly
+      ? allRows.filter((row) => {
+          const v = juliCol ? String(row[juliCol] || "").toLowerCase() : "";
+          return v.includes("juli");
+        })
+      : allRows;
 
     function matchStatus(rawValue) {
       const raw = String(rawValue ?? "").trim();
@@ -1091,9 +1102,18 @@ app.get("/api/mbb-tree", async (req, res) => {
     const nyOnAir = total - onAir; // baris "0.3 Drop MoM" sudah dibuang lewat ROW_FILTER_RULES
     const drop = 0;
 
+    // "0. HOLD", "0.1 Need Confirm by Tsel", "0.2 Confirmed Batal by Tsel"
+    // digabung jadi 1 kartu "Kendala" di tree diagram (bukan 3 kartu
+    // terpisah), dan urutan kartu funnel dibalik (tahap paling akhir di
+    // atas, "Kendala" di paling bawah) supaya sesuai contoh gambar.
+    const KENDALA_STATUSES = ["0. HOLD", "0.1 Need Confirm by Tsel", "0.2 Confirmed Batal by Tsel"];
+    const kendalaCount = KENDALA_STATUSES.reduce((sum, s) => sum + (statusCounts[s] || 0), 0);
+
     const funnelBreakdown = MBB_STATUS_ORDER
-      .filter((s) => s !== "7. L3. OA Confirmation" && s !== "7. L1 Ready")
-      .map((s) => ({ status: s, count: statusCounts[s] || 0 }));
+      .filter((s) => s !== "7. L3. OA Confirmation" && s !== "7. L1 Ready" && !KENDALA_STATUSES.includes(s))
+      .map((s) => ({ status: s, count: statusCounts[s] || 0 }))
+      .reverse();
+    funnelBreakdown.push({ status: "__KENDALA__", count: kendalaCount });
 
     res.json({
       total,
@@ -1151,7 +1171,7 @@ app.get("/api/mbb-tree", async (req, res) => {
 //            tambahan (mis. type=status&status=6.%20L0%20Ready&region=JAKARTA)
 app.get("/api/mbb-tree-rows", async (req, res) => {
   try {
-    const rows = await getSheetData("MBB");
+    const allRows = await getSheetData("MBB");
     const headers = await getSheetHeaders("MBB");
 
     const colAt = (letter) => {
@@ -1160,9 +1180,18 @@ app.get("/api/mbb-tree-rows", async (req, res) => {
     };
 
     const regionCol = colAt(MBB_REGION_LETTER);
+    const juliCol = colAt(MBB_JULI_LETTER);
     const statusColName =
       colAt(STATUS_COLUMN_LETTER.MBB) ||
-      resolveStatusColumn("MBB", rows, STATUS_COLUMN.MBB, headers);
+      resolveStatusColumn("MBB", allRows, STATUS_COLUMN.MBB, headers);
+
+    const julyOnly = req.query.julyOnly === "1";
+    const rows = julyOnly
+      ? allRows.filter((row) => {
+          const v = juliCol ? String(row[juliCol] || "").toLowerCase() : "";
+          return v.includes("juli");
+        })
+      : allRows;
 
     function matchStatus(rawValue) {
       const raw = String(rawValue ?? "").trim();
@@ -1177,6 +1206,8 @@ app.get("/api/mbb-tree-rows", async (req, res) => {
       }
       return raw;
     }
+
+    const KENDALA_STATUSES = ["0. HOLD", "0.1 Need Confirm by Tsel", "0.2 Confirmed Batal by Tsel"];
 
     const type = String(req.query.type || "total").trim();
     const statusVal = req.query.status ? String(req.query.status) : "";
@@ -1195,7 +1226,10 @@ app.get("/api/mbb-tree-rows", async (req, res) => {
       if (type === "nyrfi") return matched !== "7. L3. OA Confirmation" && matched !== "7. L1 Ready";
       if (type === "nyonair") return matched !== "7. L3. OA Confirmation";
       if (type === "drop") return false; // baris drop sudah dibuang total dari data lewat ROW_FILTER_RULES
-      if (type === "status") return matched === statusVal;
+      if (type === "status") {
+        if (statusVal === "__KENDALA__") return KENDALA_STATUSES.includes(matched);
+        return matched === statusVal;
+      }
       return true;
     });
 
@@ -1225,7 +1259,12 @@ app.get("/api/mbb-tree-rows", async (req, res) => {
 // redeploy baru. Kalau butuh catatan yang benar-benar permanen lintas
 // deploy, tambahkan Railway Volume yang di-mount ke folder `data/`.
 // ============================================================
-const NOTES_DIR = path.join(__dirname, "data");
+// NOTES_DIR bisa di-override lewat environment variable NOTES_DIR, supaya
+// bisa diarahkan ke folder yang di-mount sebagai Railway Volume (folder
+// yang TIDAK ikut hilang waktu redeploy). Kalau env var tidak diisi,
+// default-nya folder "data" di dalam project (ephemeral di Railway tanpa
+// Volume).
+const NOTES_DIR = process.env.NOTES_DIR || path.join(__dirname, "data");
 const NOTES_FILE = path.join(NOTES_DIR, "mbb-notes.json");
 
 function ensureNotesFile() {
