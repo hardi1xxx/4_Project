@@ -2,12 +2,13 @@ FROM node:18-slim
 
 WORKDIR /app
 
-# Copy manifest dulu (supaya layer install bisa di-cache terpisah dari kode)
-COPY package.json package-lock.json ./
+COPY . .
+
 RUN npm ci --omit=dev
 
-# Baru copy semua source code
-COPY . .
+# Verifikasi: kalau langkah ini gagal atau express tidak muncul di log,
+# berarti masalahnya ada di proses install ini, bukan di runtime.
+RUN ls -la node_modules | head -5 && test -d node_modules/express && echo "OK: express terinstall"
 
 ENV NODE_ENV=production
 EXPOSE 3000
