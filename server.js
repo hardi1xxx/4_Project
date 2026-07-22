@@ -482,9 +482,11 @@ const cache = {
   totalRawRows: {},  // { MBB: total baris mentah di CSV (termasuk header & baris kosong), ... }
   lastFetch: {} // { MBB: timestamp, ... }
 };
-// Refresh setiap 1 jam — data di-cache di server selama ini, dan frontend
+// Refresh setiap 24 jam (1x sehari) — data di-cache di server selama ini, dan frontend
 // juga auto-reload mengikuti interval yang sama (lihat index.html).
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
+// Tombol "Refresh Data" di sidebar tetap bisa digunakan kapan saja untuk
+// memaksa fetch data baru dari Google Sheets secara manual.
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 jam (1x sehari)
 
 // ============================================================
 // FUNGSI AMBIL DATA DARI GOOGLE SHEETS (CSV export per-sheet)

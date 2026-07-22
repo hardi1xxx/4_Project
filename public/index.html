@@ -793,7 +793,7 @@
         <div class="summary-title-pill">📌 Ringkasan Eksekutif</div>
         <div style="color:var(--muted);font-size:13px;margin-top:6px;">Untuk laporan keatas: cukup ringkas, highlight keputusan.</div>
       </div>
-      <div class="mini-chip">Auto-update <b>1 jam</b> · Klik kartu untuk detail</div>
+      <div class="mini-chip">Auto-update <b>24 jam</b> (1x sehari) · Klik kartu untuk detail</div>
     </div>
 
     <div class="summary-overall" id="summaryOverall"></div>
@@ -897,7 +897,7 @@
   </div>
 </div>
 
-<footer>Dashboard Monitoring · Telkom Akses · Danantara Indonesia · Infranexia · Auto-refresh tiap 60 detik</footer>
+<footer>Dashboard Monitoring · Telkom Akses · Danantara Indonesia · Infranexia · Auto-refresh 1x sehari · Klik "Refresh Data" untuk update manual</footer>
 
 <script>
 const SHEETS = ["MBB", "OLO", "HEM", "FBB", "PT2", "QE"];
@@ -941,10 +941,10 @@ const RELATED_PREVIEW_LIMIT = 8;
 // ============================================================
 // CACHE LAYER (di sisi browser)
 // Tujuan: pindah tab TIDAK memanggil ulang API kalau data masih segar.
-// Data hanya benar2 di-refetch kalau sudah lewat CACHE_TTL_MS (1 jam)
+// Data hanya benar2 di-refetch kalau sudah lewat CACHE_TTL_MS (24 jam)
 // atau user klik tombol "Refresh Data" secara manual.
 // ============================================================
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 jam
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 jam (1x sehari)
 const cache = {
   perSheet: {},   // { MBB: { data: {...}, stats: {...}, ts: number } }
   summary: null,  // { statsAll: {...}, ts: number }
@@ -2513,9 +2513,10 @@ document.addEventListener("keydown", (e) => {
 
 // ============================================================
 // INIT + AUTO REFRESH
-// Auto-refresh tiap 1 JAM, HANYA untuk tab/halaman yang sedang aktif
-// dilihat user (bukan semua sheet sekaligus). Pindah tab antar halaman
-// lain TIDAK memicu fetch baru selama cache masih < 1 jam.
+// Auto-refresh 1x sehari (24 jam), HANYA untuk tab/halaman yang sedang
+// aktif dilihat user (bukan semua sheet sekaligus). Pindah tab antar
+// halaman lain TIDAK memicu fetch baru selama cache masih < 24 jam.
+// Tombol "Refresh Data" di sidebar tetap bisa memaksa refresh manual.
 // ============================================================
 renderTabs();
 updatePageHeading();
