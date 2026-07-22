@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY . .
 
-RUN npm ci --omit=dev
+RUN npm install --omit=dev
 
 # Verifikasi: kalau langkah ini gagal atau express tidak muncul di log,
 # berarti masalahnya ada di proses install ini, bukan di runtime.
